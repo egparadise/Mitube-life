@@ -11,6 +11,7 @@ export const MockChannels: Omit<Channel, 'categoryId'>[] = [
     title: '라이브아카데미 Live Academy',
     description: '원어민처럼 말하는 영어 회화와 영어 발음, 문법을 쉽게 알려주는 영어 학습 채널',
     subscriberCount: 1980000,
+    isLive: true,
   },
   {
     id: 'ch-oliver',
@@ -77,6 +78,7 @@ export const MockChannels: Omit<Channel, 'categoryId'>[] = [
     title: '김지윤의 지식Play',
     description: '국제 정치와 외교, 지정학을 알기 쉽게 설명하는 시사 채널',
     subscriberCount: 740000,
+    isLive: true,
   },
   {
     id: 'ch-basic',

@@ -45,13 +45,15 @@ interface FeedVideoItem {
   timeAgo: string;
   categoryId: string | null;
   isShort?: boolean;
+  isLive?: boolean;
+  publishedAt?: string;
 }
 
 /** 데모용 고화질 최신 영상 목록 */
 const SAMPLE_VIDEOS: FeedVideoItem[] = [
   {
     id: 'vid-news-1',
-    title: '[오늘 이 뉴스] 주요 외교 안보 긴급 브리핑 & 국제 정세 심층 분석',
+    title: '[LIVE 오늘 이 뉴스] 주요 외교 안보 긴급 브리핑 & 국제 정세 심층 분석',
     thumbnail: 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop&q=80',
     duration: '14:30',
     channelId: 'ch-jiyoon',
@@ -60,6 +62,7 @@ const SAMPLE_VIDEOS: FeedVideoItem[] = [
     views: '4.2만회',
     timeAgo: '10분 전',
     categoryId: 'cat-politics',
+    isLive: true,
   },
   {
     id: 'vid-drum-1',
@@ -213,8 +216,8 @@ export default function HomeScreenFeed() {
   // 내 보관함 화면 (null = 피드). 홈·Shorts·분류를 고르면 피드로 돌아간다.
   const [library, setLibrary] = useState<LibraryKind | null>(null);
 
-  // 피드 영상 정렬 기준 ('latest' = 최신순, 'title-asc' = 영상명 ㄱ~ㅎ, 'title-desc' = 영상명 ㅎ~ㄱ, 'channel-asc' = 채널명 ㄱ~ㅎ)
-  const [feedSortOrder, setFeedSortOrder] = useState<'latest' | 'title-asc' | 'title-desc' | 'channel-asc'>('latest');
+  // 피드 영상 정렬 기준 ('latest' = 최신순, 'live' = 실시간 Live순, 'title-asc' = 영상명 ㄱ~ㅎ, 'title-desc' = 영상명 ㅎ~ㄱ, 'channel-asc' = 채널명 ㄱ~ㅎ)
+  const [feedSortOrder, setFeedSortOrder] = useState<'latest' | 'live' | 'title-asc' | 'title-desc' | 'channel-asc'>('latest');
 
   // 모바일 전용 사이드바 드로어 열림 상태
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState<boolean>(false);
@@ -410,6 +413,7 @@ export default function HomeScreenFeed() {
       if (vids && vids.length > 0) {
         for (const v of vids) {
           if (v.isShort || v.id.startsWith('sample-')) continue;
+          const isLive = v.isLive || v.title.includes('[LIVE]') || v.title.includes('라이브') || (ch.isLive ?? false);
           dated.push({
             id: v.id,
             title: v.title,
@@ -422,6 +426,7 @@ export default function HomeScreenFeed() {
             timeAgo: timeAgo(v.publishedAt),
             categoryId: ch.categoryId,
             publishedAt: v.publishedAt,
+            isLive,
           });
         }
       }
@@ -452,6 +457,13 @@ export default function HomeScreenFeed() {
   const sortedFeedVideos = useMemo(() => {
     const list = [...feedVideos];
     switch (feedSortOrder) {
+      case 'live':
+        return list.sort((a, b) => {
+          if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
+          const aTime = a.publishedAt ?? '';
+          const bTime = b.publishedAt ?? '';
+          return bTime.localeCompare(aTime);
+        });
       case 'title-asc':
         return list.sort((a, b) => a.title.localeCompare(b.title, 'ko', { sensitivity: 'base', numeric: true }));
       case 'title-desc':
@@ -839,6 +851,31 @@ export default function HomeScreenFeed() {
               <View style={styles.feedSortChips}>
                 <Pressable
                   role="button"
+                  aria-label="실시간 Live 영상 정렬"
+                  onPress={() => setFeedSortOrder('live')}
+                  style={({ pressed }) => [
+                    styles.feedSortChip,
+                    { borderColor: theme.backgroundSelected },
+                    feedSortOrder === 'live' && {
+                      backgroundColor: '#ff0033',
+                      borderColor: '#ff0033',
+                    },
+                    pressed && { opacity: 0.8 },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.feedSortChipText,
+                      {
+                        color: feedSortOrder === 'live' ? '#ffffff' : '#ff0033',
+                        fontWeight: '700',
+                      },
+                    ]}>
+                    🔴 Live
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  role="button"
                   aria-label="최신순 정렬"
                   onPress={() => setFeedSortOrder('latest')}
                   style={({ pressed }) => [
@@ -1112,6 +1149,12 @@ function VideoCard({
       style={({ pressed }) => [styles.videoCard, isMobile && styles.videoCardMobile, pressed && { opacity: 0.9 }]}>
       <View style={styles.thumbBox}>
         <Image source={{ uri: item.thumbnail }} style={styles.thumbImage} resizeMode="cover" />
+        {item.isLive && (
+          <View style={styles.videoLiveBadge}>
+            <View style={styles.liveDot} />
+            <Text style={styles.videoLiveText}>LIVE</Text>
+          </View>
+        )}
         {item.duration ? (
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>{item.duration}</Text>
@@ -1608,5 +1651,30 @@ const styles = StyleSheet.create({
   },
   feedSortChipText: {
     fontSize: 12,
+  },
+  videoLiveBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ff0033',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 4,
+    zIndex: 2,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ffffff',
+  },
+  videoLiveText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });

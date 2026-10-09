@@ -14,8 +14,8 @@ import { AdminSettings, Category, Channel, ChannelAlert, Playlist, SavedVideo, V
  */
 export const isValidYouTubeApiKey = (key: string | null | undefined) => /^AIza[0-9A-Za-z_-]{30,}$/.test((key ?? '').trim());
 
-/** 채널 정렬 기준: 가나다/알파벳순(오름/내림차순), 최신 업로드순, 구독자순, 기본 등록순 */
-export type ChannelSortOrder = 'name-asc' | 'name-desc' | 'latest' | 'subscribers' | 'default';
+/** 채널 정렬 기준: 현재 Live 방송순, 가나다/알파벳순(오름/내림차순), 최신 업로드순, 구독자순, 기본 등록순 */
+export type ChannelSortOrder = 'live' | 'name-asc' | 'name-desc' | 'latest' | 'subscribers' | 'default';
 
 export const DefaultAdminSettings: AdminSettings = {
   dailyLimitOn: false,

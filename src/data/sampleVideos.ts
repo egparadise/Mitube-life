@@ -163,9 +163,10 @@ export const SampleVideosByChannel: Record<string, Video[]> = {
   'ch-jiyoon': [
     {
       id: 'vid-jiyoon-1',
-      title: '미국 대선 이후 요동치는 세계 경제와 동아시아 안보 지형 분석',
+      title: '[LIVE] 미국 대선 이후 요동치는 세계 경제와 동아시아 안보 지형 분석',
       thumbnail: 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&auto=format&fit=crop&q=80',
       publishedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+      isLive: true,
     },
     {
       id: 'vid-jiyoon-2',

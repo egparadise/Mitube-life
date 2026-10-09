@@ -58,6 +58,8 @@ export function ChannelCard({
     Linking.openURL(channelUrl(channel)).catch(() => {});
   };
 
+  const isLive = channel.isLive || videos.some((v) => v.isLive);
+
   // 모바일 / 좁은 화면: 상단에 채널 정보 + 우측 설정, 하단에 최신 영상 썸네일 스트립 전체 너비 배치
   if (compact) {
     return (
@@ -87,6 +89,12 @@ export function ChannelCard({
               role="link"
               aria-label={`${channel.title} 유튜브 채널 열기`}
               style={({ pressed }) => [styles.titleRow, pressed && styles.pressed]}>
+              {isLive && (
+                <View style={styles.liveBadge}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveBadgeText}>LIVE</Text>
+                </View>
+              )}
               {subLabel ? (
                 <View style={[styles.subTag, { backgroundColor: subLabel.color }]}>
                   <Text
@@ -165,6 +173,12 @@ export function ChannelCard({
           role="link"
           aria-label={`${channel.title} 유튜브 채널 열기`}
           style={({ pressed }) => [styles.titleRow, pressed && styles.pressed]}>
+          {isLive && (
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBadgeText}>LIVE</Text>
+            </View>
+          )}
           {subLabel ? (
             <View style={[styles.subTag, { backgroundColor: subLabel.color }]}>
               <Text
@@ -308,5 +322,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     borderRadius: Spacing.five,
     borderWidth: 1,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ff0033',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 4,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ffffff',
+  },
+  liveBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });

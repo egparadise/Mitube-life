@@ -67,6 +67,8 @@ export interface Video {
   publishedAt: string;
   /** 쇼츠(세로형 짧은 영상)인지. */
   isShort?: boolean;
+  /** 현재 실시간 라이브 방송 중인지. */
+  isLive?: boolean;
 }
 
 export interface Channel {
@@ -80,6 +82,8 @@ export interface Channel {
   subscriberCount?: number;
   /** 속한 분류함. null = 미분류. */
   categoryId: string | null;
+  /** 현재 실시간 라이브 방송 중인지. */
+  isLive?: boolean;
 }
 
 /** 관리자 페이지에서 바꾸는 앱 환경설정 (이 기기에 저장). */

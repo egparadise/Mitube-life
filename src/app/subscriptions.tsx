@@ -167,10 +167,23 @@ export default function HomeScreen() {
     [activeKey, reorderCategories],
   );
 
-  // 채널 정렬 (가나다/알파벳순, 최신 업로드순, 구독자순, 기본순)
+  // 채널 정렬 (현재 Live 방송순, 가나다/알파벳순, 최신 업로드순, 구독자순, 기본순)
   const sortedChannels = useMemo(() => {
     const list = [...activeChannels];
     switch (channelSortOrder) {
+      case 'live':
+        return list.sort((a, b) => {
+          const aLive = a.isLive || (recentVideos[a.id]?.some((v) => v.isLive) ?? false);
+          const bLive = b.isLive || (recentVideos[b.id]?.some((v) => v.isLive) ?? false);
+          if (aLive !== bLive) return aLive ? -1 : 1; // Live 방송 중인 채널 우선
+          // 그 안에서는 최신 영상순, 그다음 가나다순
+          const aVids = recentVideos[a.id] ?? [];
+          const bVids = recentVideos[b.id] ?? [];
+          const aTime = aVids[0]?.publishedAt ? new Date(aVids[0].publishedAt).getTime() : 0;
+          const bTime = bVids[0]?.publishedAt ? new Date(bVids[0].publishedAt).getTime() : 0;
+          if (bTime !== aTime) return bTime - aTime;
+          return a.title.localeCompare(b.title, 'ko', { sensitivity: 'base', numeric: true });
+        });
       case 'name-asc':
         return list.sort((a, b) => a.title.localeCompare(b.title, 'ko', { sensitivity: 'base', numeric: true }));
       case 'name-desc':
@@ -508,6 +521,29 @@ export default function HomeScreen() {
                   </ThemedText>
                 </View>
                 <View style={styles.sortChipsRow}>
+                  <Pressable
+                    role="button"
+                    aria-label="Live 방송 중인 채널 정렬"
+                    onPress={() => setChannelSortOrder('live')}
+                    style={({ pressed }) => [
+                      styles.sortChip,
+                      { borderColor: theme.backgroundSelected },
+                      channelSortOrder === 'live' && {
+                        backgroundColor: '#ff0033',
+                        borderColor: '#ff0033',
+                      },
+                      pressed && { opacity: 0.8 },
+                    ]}>
+                    <ThemedText
+                      type="small"
+                      style={[
+                        styles.sortChipText,
+                        { color: channelSortOrder === 'live' ? '#ffffff' : '#ff0033', fontWeight: '700' },
+                      ]}>
+                      🔴 Live
+                    </ThemedText>
+                  </Pressable>
+
                   <Pressable
                     role="button"
                     aria-label="가나다순 정렬"
