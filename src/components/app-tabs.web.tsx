@@ -67,14 +67,14 @@ export function TabButton({
       ]}>
       {isFocused ? (
         <View style={styles.key}>
-          <Text style={[styles.keyText, isMobile && { fontSize: 13 }]}>{children}</Text>
+          <Text style={[styles.keyText, isMobile && { fontSize: 12, paddingHorizontal: 2 }]}>{children}</Text>
         </View>
       ) : (
         <Text
           style={[
             styles.idleText,
             { color: dark ? '#6b6f78' : '#b9b9be' },
-            isMobile && { fontSize: 13, paddingHorizontal: 6 },
+            isMobile && { fontSize: 12, paddingHorizontal: 2 },
           ]}>
           {children}
         </Text>
@@ -92,12 +92,12 @@ export function CustomTabList(props: TabListProps) {
   const isTiny = width < 360;
 
   return (
-    <View {...props} style={[styles.tabListContainer, isMobile && { padding: 8 }]}>
+    <View {...props} style={[styles.tabListContainer, isMobile && { padding: 4, paddingHorizontal: 6 }]}>
       <ThemedView
         type="backgroundElement"
         style={[
           styles.innerContainer,
-          isMobile && { paddingHorizontal: 8, paddingVertical: 5, gap: 6 },
+          isMobile && { paddingHorizontal: 6, paddingVertical: 4, gap: 4, width: '100%' },
         ]}>
         <Pressable
           onPress={() => openLanding('home')}
@@ -107,7 +107,7 @@ export function CustomTabList(props: TabListProps) {
           <View style={styles.brandRow}>
             <Image
               source={require('@/assets/images/mascot.webp')}
-              style={[styles.brandMascot, (isSmall || isTiny) && { width: 22, height: 22 }]}
+              style={[styles.brandMascot, (isSmall || isTiny) && { width: 20, height: 20 }]}
               contentFit="contain"
             />
             {/* 좁은 화면에서는 검색창 자리를 위해 글자 로고를 숨긴다 */}
@@ -129,8 +129,8 @@ export function CustomTabList(props: TabListProps) {
           style={[
             styles.track,
             { backgroundColor: dark ? '#2a2c31' : '#e9e9ec' },
-            { width: isTiny ? 150 : isSmall ? 175 : isMobile ? 200 : 310 },
-            isMobile && { height: 38 },
+            { width: isTiny ? 135 : isSmall ? 150 : isMobile ? 165 : 310 },
+            isMobile && { height: 34, borderWidth: 2 },
           ]}>
           {props.children}
         </View>
@@ -142,11 +142,16 @@ export function CustomTabList(props: TabListProps) {
 const styles = StyleSheet.create({
   tabListContainer: {
     position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     width: '100%',
+    maxWidth: '100%',
     padding: Spacing.three,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    zIndex: 100,
   },
   innerContainer: {
     paddingVertical: Spacing.two,
@@ -157,9 +162,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     gap: Spacing.two,
     maxWidth: MaxContentWidth,
+    width: '100%',
   },
   brandButton: {
-    cursor: 'pointer',
+    cursor: 'pointer' as any,
     paddingVertical: 4,
     paddingHorizontal: 6,
     borderRadius: 8,
@@ -188,7 +194,7 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    cursor: 'pointer',
+    cursor: 'pointer' as any,
   },
   // 선택된 칸: 트랙 안쪽에 꼭 맞는 볼록한 분홍 알약 키
   key: {

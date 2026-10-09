@@ -1044,8 +1044,8 @@ function ShortsCard({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  layoutRow: { flex: 1, flexDirection: 'row' },
+  root: { flex: 1, width: '100%', maxWidth: '100%', overflow: 'hidden' },
+  layoutRow: { flex: 1, flexDirection: 'row', width: '100%', maxWidth: '100%', overflow: 'hidden' },
 
   // 좌측 사이드바
   sidebar: {
@@ -1177,8 +1177,14 @@ const styles = StyleSheet.create({
   mainFeed: {
     flex: 1,
     minWidth: 0,
+    width: '100%',
+    maxWidth: '100%',
+    overflow: 'hidden',
   },
   chipBar: {
+    width: '100%',
+    maxWidth: '100%',
+    overflow: 'hidden',
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.06)',
@@ -1211,7 +1217,10 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   feedContentMobile: {
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    width: '100%',
+    maxWidth: '100%',
   },
 
   // 비디오 그리드
@@ -1223,6 +1232,8 @@ const styles = StyleSheet.create({
   videoGridMobile: {
     flexDirection: 'column',
     gap: 20,
+    width: '100%',
+    maxWidth: '100%',
   },
   videoCard: {
     flex: 1,
@@ -1231,7 +1242,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   videoCardMobile: {
-    minWidth: '100%',
+    width: '100%',
+    minWidth: 0,
     maxWidth: '100%',
   },
   thumbBox: {
@@ -1298,6 +1310,9 @@ const styles = StyleSheet.create({
 
   // 쇼츠 섹션
   shortsSection: {
+    width: '100%',
+    maxWidth: '100%',
+    overflow: 'hidden',
     marginTop: 28,
     marginBottom: 8,
     gap: 14,

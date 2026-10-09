@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
+import { getSampleVideosForChannel } from '@/data/sampleVideos';
 import { fetchRecentVideos, YouTubeAuthError, YouTubeReadAuth } from '@/services/youtube';
 import { useStore } from '@/store/store';
-import { Channel } from '@/types';
+import { Channel, Video } from '@/types';
 
 /** 토큰이 이 시간 안에 만료되면 이미 만료된 것으로 본다. */
 const TOKEN_MARGIN_MS = 60_000;
@@ -90,24 +91,32 @@ export function useNewVideoCheck() {
 
   const check = useCallback(async () => {
     if (running.current) return;
-    const { channels, saveRecentVideos } = useStore.getState();
+    const { channels, saveRecentVideos, recentVideos: existingVideos } = useStore.getState();
     const auth = readAuthFromStore();
-    if (!auth) {
-      setState('needs-login');
-      return;
-    }
+
     running.current = true;
     setState('checking');
     setMessage('');
     setProgress({ done: 0, total: channels.length });
     try {
-      const videos = await fetchRecentVideos(auth, channels.map((c) => c.id), {
-        // 진행 표시는 10개 단위로만 갱신해 불필요한 다시 그리기를 줄인다.
-        onProgress: (done, total) => {
-          if (done % 10 === 0 || done === total) setProgress({ done, total });
-        },
-      });
-      saveRecentVideos(videos, Date.now());
+      if (auth) {
+        const videos = await fetchRecentVideos(auth, channels.map((c) => c.id), {
+          // 진행 표시는 10개 단위로만 갱신해 불필요한 다시 그리기를 줄인다.
+          onProgress: (done, total) => {
+            if (done % 10 === 0 || done === total) setProgress({ done, total });
+          },
+        });
+        saveRecentVideos(videos, Date.now());
+      } else {
+        // YouTube API 로그인 전이라도 샘플 데이터로 최신 영상 확인 및 알람 배지 계산
+        const videos: Record<string, Video[]> = { ...existingVideos };
+        for (const ch of channels) {
+          if (!videos[ch.id] || videos[ch.id].length === 0) {
+            videos[ch.id] = getSampleVideosForChannel(ch.id);
+          }
+        }
+        saveRecentVideos(videos, Date.now());
+      }
       setState('idle');
     } catch (e) {
       if (e instanceof YouTubeAuthError) {

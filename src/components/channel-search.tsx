@@ -50,9 +50,10 @@ export function ChannelSearch({ compact = false }: { compact?: boolean }) {
       <View
         style={[
           styles.inputBox,
+          compact && styles.inputBoxCompact,
           { backgroundColor: theme.background, borderColor: focused ? '#ff9fd8' : theme.backgroundSelected },
         ]}>
-        <MaterialCommunityIcons name="magnify" size={18} color={theme.textSecondary} />
+        <MaterialCommunityIcons name="magnify" size={compact ? 16 : 18} color={theme.textSecondary} />
         <TextInput
           value={query}
           onChangeText={(t) => {
@@ -69,9 +70,9 @@ export function ChannelSearch({ compact = false }: { compact?: boolean }) {
             else if (key === 'Escape') setQuery('');
           }}
           onSubmitEditing={() => open(active)}
-          placeholder={compact ? '채널 검색' : '내 구독 채널 검색'}
+          placeholder={compact ? '검색' : '내 구독 채널 검색'}
           placeholderTextColor={theme.textSecondary}
-          style={[styles.input, { color: theme.text }]}
+          style={[styles.input, compact && styles.inputCompact, { color: theme.text }]}
           aria-label="내 구독 채널 검색"
         />
         {query.length > 0 && (
@@ -128,7 +129,7 @@ export function ChannelSearch({ compact = false }: { compact?: boolean }) {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, maxWidth: 420, minWidth: 0, marginHorizontal: 12, marginRight: 'auto', zIndex: 10 },
-  wrapCompact: { marginHorizontal: 4 },
+  wrapCompact: { marginHorizontal: 2, minWidth: 40 },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -138,7 +139,14 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 2,
   },
+  inputBoxCompact: {
+    height: 34,
+    paddingHorizontal: 8,
+    gap: 4,
+    borderWidth: 1.5,
+  },
   input: { flex: 1, minWidth: 0, fontSize: 14, outlineStyle: 'none' } as object,
+  inputCompact: { fontSize: 12 },
   panel: {
     position: 'absolute',
     top: 46,

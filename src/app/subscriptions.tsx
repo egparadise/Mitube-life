@@ -163,12 +163,10 @@ export default function HomeScreen() {
   useEffect(() => {
     // 처음 열 때와 새로 로그인했을 때, 마지막 확인이 30분 넘게 지났으면 자동으로 확인한다.
     if (!hydrated || !hasChannels) return;
-    // API 키가 있으면 로그인 없이, 없으면 살아 있는 로그인 토큰으로 확인한다.
-    if (!readAuthFromStore()) return;
     const s = useStore.getState();
     if (s.lastCheckedAt && Date.now() - s.lastCheckedAt < AUTO_CHECK_MS) return;
     check();
-  }, [hydrated, hasChannels, accessToken, youtubeApiKey, check]);
+  }, [hydrated, hasChannels, check]);
 
   const pillItems: PillItem[] = tabs
     .filter((t) => (newByTab.get(t.key) ?? 0) > 0)
@@ -179,19 +177,9 @@ export default function HomeScreen() {
       count: newByTab.get(t.key) ?? 0,
     }));
   const activeNew = activeChannels.reduce((sum, ch) => sum + (newByChannel.get(ch.id) ?? 0), 0);
-  // 로그인이 없거나 만료됐으면 ⏰ 표시줄에 '눌러서 로그인'을 띄운다.
-  const pillState =
-    checkState === 'idle' && !youtubeApiKey && !isTokenUsable(accessToken, tokenExpiresAt)
-      ? 'needs-login'
-      : checkState;
+  const pillState = checkState;
 
   const onAlarm = () => {
-    if (!readAuthFromStore()) {
-      // 로그인(약 1시간 유효)이 없거나 만료 → 설정의 유튜브 연결 창을 연다.
-      setConnectRequested(true);
-      router.push('/explore');
-      return;
-    }
     check();
   };
 
@@ -474,13 +462,14 @@ function EmptyState({ onImport }: { onImport: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, width: '100%', maxWidth: '100%', overflow: 'hidden' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   frame: {
     flex: 1,
     width: '100%',
     maxWidth: MAX_WIDTH,
     alignSelf: 'center',
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
