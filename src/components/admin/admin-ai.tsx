@@ -155,8 +155,9 @@ export function AiSettings() {
         </Text>
         {status.state === 'off' && (
           <Text style={[styles.help, { color: theme.textSecondary }]}>
-            Ollama 설치: https://ollama.com/download → 설치 후 자동 실행돼요. 배포 사이트에서 쓰려면 Ollama 를
-            OLLAMA_ORIGINS=* 로 실행해야 해요.
+            Ollama 설치: https://ollama.com/download → 설치 후 자동 실행돼요. 배포 사이트(mitube-life.web.app)에서 쓰려면
+            ① 이 PC 의 Ollama 가 이 사이트를 허용해야 하고(환경 변수 OLLAMA_ORIGINS 에 사이트 주소 추가 후 Ollama 재시작),
+            ② 크롬이 '로컬 네트워크 기기 액세스'를 물으면 [허용]을 눌러야 해요 (주소창 왼쪽 아이콘에서도 바꿀 수 있어요).
           </Text>
         )}
       </SettingRow>
