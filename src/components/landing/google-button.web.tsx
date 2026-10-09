@@ -89,6 +89,10 @@ export function GoogleButton({ onPress, busy }: { onPress: () => void; busy?: bo
     <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={styles.wrap}>
       <View ref={holder} style={styles.holder} aria-label="Google 계정으로 가입 또는 로그인" />
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      <Text style={styles.altHint}>
+        Google 버튼을 눌러도 로그인이 안 되는 화면(Orca 같은 프로그램 안 화면 등)에서는, 크롬에서 Google 로 로그인한 뒤
+        설정 → 계정 → 🔑 비밀번호 설정을 하고 여기 위 칸에 이메일 + 그 비밀번호로 로그인하세요.
+      </Text>
     </View>
   );
 }
@@ -143,4 +147,5 @@ const styles = StyleSheet.create({
   wrap: { width: '100%', alignItems: 'center', gap: 6 },
   holder: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   error: { color: '#ef4444', fontSize: 13, textAlign: 'center' },
+  altHint: { color: '#8a8f98', fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 2 },
 });

@@ -176,6 +176,16 @@ export async function signInWithGoogle(): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * 지금 로그인한 계정에 비밀번호를 정한다 (Google 로 가입한 계정도 가능).
+ * Google 창을 띄울 수 없는 곳(Orca 같은 데스크톱 앱 안 화면, 카톡 안 브라우저 등)에서
+ * '이메일 + 비밀번호'로 같은 계정에 로그인하려고 쓴다.
+ */
+export async function setAccountPassword(password: string): Promise<void> {
+  const { error } = await requireSupabase().auth.updateUser({ password });
+  if (error) throw error;
+}
+
 export async function signOut(): Promise<void> {
   const { error } = await requireSupabase().auth.signOut();
   if (error) throw error;

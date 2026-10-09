@@ -1,6 +1,6 @@
 import Head from 'expo-router/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AdminLoginModal } from '@/components/admin/admin-login-modal';
@@ -14,7 +14,8 @@ import { YouTubeConnectModal } from '@/components/youtube-connect-modal';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/components/auth-provider';
-import { signOut } from '@/services/auth';
+import { authErrorMessage, setAccountPassword, signOut } from '@/services/auth';
+import { checkPassword, checkPasswordConfirm } from '@/utils/signup-validation';
 import { applyBackup, BACKUP_SUPPORTED, downloadBackup, pickBackup } from '@/services/backup';
 import { pushChanges } from '@/services/cloud-sync';
 import { useStore } from '@/store/store';
@@ -123,6 +124,30 @@ export default function SettingsScreen() {
       setSyncState({ syncStatus: 'error', syncError: e instanceof Error ? e.message : String(e) });
     }
   };
+  // 계정 비밀번호 설정 (Google 가입 계정도) — Orca 처럼 Google 창이 안 뜨는 곳에서 이메일로 로그인하려고.
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pw1, setPw1] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [pwNote, setPwNote] = useState<{ ok?: string; error?: string }>({});
+  const savePassword = async () => {
+    const err = checkPassword(pw1) ?? checkPasswordConfirm(pw1, pw2);
+    if (err) {
+      setPwNote({ error: err });
+      return;
+    }
+    try {
+      await setAccountPassword(pw1);
+      setPw1('');
+      setPw2('');
+      setPwOpen(false);
+      setPwNote({
+        ok: `비밀번호를 정했어요. 이제 Orca 같은 앱 안 화면에서도 ${session?.user.email ?? '이메일'} + 이 비밀번호로 로그인할 수 있어요.`,
+      });
+    } catch (e) {
+      setPwNote({ error: authErrorMessage(e) });
+    }
+  };
+
   const logout = async () => {
     try {
       await signOut();
@@ -260,6 +285,51 @@ export default function SettingsScreen() {
                     </ThemedText>
                   </View>
                 </Row>
+                <Row onPress={() => setPwOpen((v) => !v)} divider>
+                  <ThemedText style={styles.actionEmoji}>🔑</ThemedText>
+                  <View style={styles.rowLabel}>
+                    <ThemedText type="default">비밀번호 설정</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Google 창이 안 뜨는 곳(Orca 같은 앱 안 화면 등)에서 이메일 + 비밀번호로 로그인할 때 써요.
+                    </ThemedText>
+                  </View>
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.chevron}>
+                    {pwOpen ? '˅' : '›'}
+                  </ThemedText>
+                </Row>
+                {pwOpen && (
+                  <View style={[styles.pwBox, { backgroundColor: theme.backgroundElement }]}>
+                    <TextInput
+                      value={pw1}
+                      onChangeText={setPw1}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      placeholder="새 비밀번호 (영문+숫자 8자 이상)"
+                      placeholderTextColor={theme.textSecondary}
+                      style={[styles.pwInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
+                    />
+                    <TextInput
+                      value={pw2}
+                      onChangeText={setPw2}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      placeholder="한 번 더"
+                      placeholderTextColor={theme.textSecondary}
+                      onSubmitEditing={savePassword}
+                      style={[styles.pwInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
+                    />
+                    <Pressable onPress={savePassword} role="button" aria-label="비밀번호 저장" style={styles.pwSave}>
+                      <ThemedText type="smallBold" style={{ color: '#ffffff' }}>
+                        저장
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                )}
+                {pwNote.ok || pwNote.error ? (
+                  <ThemedText type="small" style={[styles.hint, { color: pwNote.error ? '#EF4444' : '#16a34a' }]}>
+                    {pwNote.error ?? pwNote.ok}
+                  </ThemedText>
+                ) : null}
                 <Row onPress={logout} divider>
                   <ThemedText style={styles.actionEmoji}>🚪</ThemedText>
                   <ThemedText type="default" style={[styles.rowLabel, { color: '#EF4444' }]}>
@@ -654,6 +724,9 @@ const styles = StyleSheet.create({
   subIndent: { width: 32, textAlign: 'right' },
   subDot: { width: 12, height: 12, borderRadius: 6 },
   hint: { marginTop: Spacing.two, paddingHorizontal: Spacing.one },
+  pwBox: { padding: Spacing.three, gap: Spacing.two },
+  pwInput: { borderWidth: 1, borderRadius: 10, height: 42, paddingHorizontal: 12, fontSize: 15 },
+  pwSave: { backgroundColor: '#1b2c9e', borderRadius: 10, height: 42, alignItems: 'center', justifyContent: 'center' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   adminBadge: { backgroundColor: '#1b2c9e', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
   adminBadgeText: { color: '#ffffff', fontSize: 11, lineHeight: 16, fontWeight: '700' },
