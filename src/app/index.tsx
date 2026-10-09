@@ -393,8 +393,17 @@ export default function HomeScreenFeed() {
       list.push(ch);
       map.set(catId, list);
     }
+    // 각 카테고리 내 채널 정렬: 현재 Live 방송 중인 채널을 맨 위로 우선 배치
+    for (const list of map.values()) {
+      list.sort((a, b) => {
+        const aLive = a.isLive || (recentVideos[a.id]?.some((v) => v.isLive) ?? false);
+        const bLive = b.isLive || (recentVideos[b.id]?.some((v) => v.isLive) ?? false);
+        if (aLive !== bLive) return aLive ? -1 : 1;
+        return a.title.localeCompare(b.title, 'ko');
+      });
+    }
     return map;
-  }, [channels]);
+  }, [channels, recentVideos]);
 
   const toggleCatExpand = (catId: string) => {
     setExpandedCats((prev) => ({ ...prev, [catId]: !prev[catId] }));
@@ -698,27 +707,35 @@ export default function HomeScreenFeed() {
                   })}
 
                   {/* 대분류 바로 아래 채널 목록 */}
-                  {catChannels.slice(0, 5).map((ch) => (
-                    <Pressable
-                      key={ch.id}
-                      onPress={() => {
-                        setMobileDrawerOpen(false);
-                        Linking.openURL(channelUrl(ch));
-                      }}
-                      style={styles.channelSideRow}>
-                      {ch.thumbnail ? (
-                        <Image source={{ uri: ch.thumbnail }} style={styles.channelSideAvatar} />
-                      ) : (
-                        <View style={[styles.channelSideAvatarFallback, { backgroundColor: topCat.color }]}>
-                          <Text style={styles.channelSideInitial}>{ch.title.slice(0, 1)}</Text>
-                        </View>
-                      )}
-                      <Text style={[styles.channelSideTitle, { color: theme.textSecondary }]} numberOfLines={1}>
-                        {ch.title}
-                      </Text>
-                      <View style={styles.sideLiveDot} />
-                    </Pressable>
-                  ))}
+                  {catChannels.slice(0, 5).map((ch) => {
+                    const isChLive = ch.isLive || (recentVideos[ch.id]?.some((v) => v.isLive) ?? false);
+                    return (
+                      <Pressable
+                        key={ch.id}
+                        onPress={() => {
+                          setMobileDrawerOpen(false);
+                          Linking.openURL(channelUrl(ch));
+                        }}
+                        style={styles.channelSideRow}>
+                        {ch.thumbnail ? (
+                          <Image source={{ uri: ch.thumbnail }} style={styles.channelSideAvatar} />
+                        ) : (
+                          <View style={[styles.channelSideAvatarFallback, { backgroundColor: topCat.color }]}>
+                            <Text style={styles.channelSideInitial}>{ch.title.slice(0, 1)}</Text>
+                          </View>
+                        )}
+                        <Text style={[styles.channelSideTitle, { color: theme.textSecondary }]} numberOfLines={1}>
+                          {ch.title}
+                        </Text>
+                        {isChLive && (
+                          <View style={styles.sideLiveTag}>
+                            <View style={styles.sideLiveDot} />
+                            <Text style={styles.sideLiveText}>LIVE</Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -804,15 +821,42 @@ export default function HomeScreenFeed() {
                 style={[
                   styles.chipItem,
                   { backgroundColor: theme.backgroundElement },
-                  selectedCategory === 'all' && !shortsOnly && [styles.chipActive, { backgroundColor: theme.text }],
+                  selectedCategory === 'all' && feedSortOrder !== 'live' && !shortsOnly && [styles.chipActive, { backgroundColor: theme.text }],
                 ]}>
                 <Text
                   style={[
                     styles.chipText,
                     { color: theme.text },
-                    selectedCategory === 'all' && !shortsOnly && [styles.chipTextActive, { color: theme.background }],
+                    selectedCategory === 'all' && feedSortOrder !== 'live' && !shortsOnly && [styles.chipTextActive, { color: theme.background }],
                   ]}>
                   전체
+                </Text>
+              </Pressable>
+
+              {/* 🔴 Live 전용 칩: 누르면 실시간 Live 방송을 최상단으로 우선 정렬 */}
+              <Pressable
+                role="button"
+                aria-label="실시간 Live 방송 모아보기"
+                onPress={() => {
+                  setSelectedCategory('all');
+                  setFeedSortOrder((prev) => (prev === 'live' ? 'latest' : 'live'));
+                  setShortsOnly(false);
+                  feedScrollRef.current?.scrollTo?.({ y: 0, animated: true });
+                }}
+                style={[
+                  styles.chipItem,
+                  { backgroundColor: theme.backgroundElement },
+                  feedSortOrder === 'live' && !shortsOnly && [styles.chipActive, { backgroundColor: '#ff0033' }],
+                ]}>
+                <Text
+                  style={[
+                    styles.chipText,
+                    {
+                      color: feedSortOrder === 'live' && !shortsOnly ? '#ffffff' : '#ff0033',
+                      fontWeight: '800',
+                    },
+                  ]}>
+                  🔴 Live
                 </Text>
               </Pressable>
 
@@ -1342,11 +1386,26 @@ const styles = StyleSheet.create({
   },
   channelSideInitial: { color: '#fff', fontSize: 10, fontWeight: '700' },
   channelSideTitle: { fontSize: 12, flex: 1 },
-  sideLiveDot: {
-    width: 6,
-    height: 6,
+  sideLiveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#ff0033',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
     borderRadius: 3,
-    backgroundColor: '#3B82F6',
+  },
+  sideLiveDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#ffffff',
+  },
+  sideLiveText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 
   // 좌우 너비 조절 드래그 바
