@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { getSampleVideosForChannel } from '@/data/sampleVideos';
 import { canRequestYouTubeToken, requestYouTubeAccessToken } from '@/services/google-gsi';
-import { fetchRecentVideos, YouTubeAuthError, YouTubeReadAuth } from '@/services/youtube';
+import { fetchRecentVideos, fetchSubscriptions, YouTubeAuthError, YouTubeReadAuth } from '@/services/youtube';
 import { isValidYouTubeApiKey, useStore } from '@/store/store';
 import { Channel, Video } from '@/types';
 
@@ -150,8 +150,20 @@ export function useNewVideoCheck() {
     setMessage('');
     setProgress({ done: 0, total: channels.length });
     try {
+      if (auth && 'accessToken' in auth && hasReal) {
+        // YouTube 구독 목록과 맞춘다: 구독 취소한 채널은 빠지고, 새로 구독한 채널은 자동 분류돼 들어온다.
+        // (구독 목록은 로그인 토큰으로만 읽을 수 있다. 50개당 1 할당량이라 부담이 적다)
+        try {
+          const subs = await fetchSubscriptions(auth.accessToken);
+          if (subs.length > 0) useStore.getState().importYouTubeChannels(subs);
+        } catch (e) {
+          if (e instanceof YouTubeAuthError) throw e;
+          // 구독 목록을 못 받아도 최신 영상 확인은 계속한다.
+        }
+      }
       if (auth) {
-        const videos = await fetchRecentVideos(auth, channels.map((c) => c.id), {
+        const latest = useStore.getState().channels;
+        const videos = await fetchRecentVideos(auth, latest.map((c) => c.id), {
           // 진행 표시는 10개 단위로만 갱신해 불필요한 다시 그리기를 줄인다.
           onProgress: (done, total) => {
             if (done % 10 === 0 || done === total) setProgress({ done, total });

@@ -27,7 +27,8 @@ import { Spacing } from '@/constants/theme';
 import { readAuthFromStore } from '@/hooks/use-new-videos';
 import { useTheme } from '@/hooks/use-theme';
 import { shortsLimitReached } from '@/hooks/use-usage-tracker';
-import { initialSync } from '@/services/cloud-sync';
+import { syncNow } from '@/services/cloud-sync';
+import { timeAgo } from '@/utils/format';
 import { channelUrl, fetchRecentVideos } from '@/services/youtube';
 import { useStore } from '@/store/store';
 import { Category, Channel, Video } from '@/types';
@@ -247,13 +248,15 @@ export default function HomeScreenFeed() {
       const uid = useStore.getState().syncedUserId;
       if (uid) {
         try {
-          await initialSync(uid);
+          await syncNow(uid); // 먼저 올리고 받는다 (방금 바꾼 내용이 지워지지 않게)
         } catch {}
       }
 
-      // 2. 유튜브 최신 영상 갱신
+      // 2. 유튜브 최신 영상 갱신 — 30분 안에 확인했으면 건너뛴다.
+      //    (예전에는 탭을 누를 때마다 360개 채널을 다시 받아 하루 YouTube 사용량을 빠르게 소진했다)
       const auth = readAuthFromStore();
-      if (auth) {
+      const last = useStore.getState().lastCheckedAt;
+      if (auth && (!last || Date.now() - last > 30 * 60 * 1000)) {
         const { channels, saveRecentVideos } = useStore.getState();
         const videos = await fetchRecentVideos(auth, channels.map((c) => c.id));
         saveRecentVideos(videos, Date.now());
@@ -391,34 +394,45 @@ export default function HomeScreenFeed() {
     setExpandedCats((prev) => ({ ...prev, [catId]: !prev[catId] }));
   };
 
+  // 실제 YouTube 구독 채널이 있는지 (없으면 둘러보기 — 데모 영상으로 채운다)
+  const hasRealChannels = useMemo(() => channels.some((c) => /^UC[\w-]{10,}$/.test(c.id)), [channels]);
+
   // 피드용 비디오 목록 구성
   const feedVideos = useMemo(() => {
     const list: FeedVideoItem[] = [];
 
+    const dated: (FeedVideoItem & { publishedAt: string })[] = [];
     for (const ch of channels) {
       const vids = recentVideos[ch.id];
       if (vids && vids.length > 0) {
         for (const v of vids) {
-          if (v.isShort) continue;
-          list.push({
+          if (v.isShort || v.id.startsWith('sample-')) continue;
+          dated.push({
             id: v.id,
             title: v.title,
             thumbnail: thumbUrl(v.id, thumbQuality, v.thumbnail),
-            duration: '10:24',
+            duration: '',
             channelId: ch.id,
             channelTitle: ch.title,
             channelAvatar: ch.thumbnail,
-            views: '조회수 5.4만회',
-            timeAgo: '최근 업로드',
+            views: '',
+            timeAgo: timeAgo(v.publishedAt),
             categoryId: ch.categoryId,
+            publishedAt: v.publishedAt,
           });
         }
       }
     }
+    // 최신순
+    dated.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
+    list.push(...dated);
 
-    const existingIds = new Set(list.map((v) => v.id));
-    for (const s of SAMPLE_VIDEOS) {
-      if (!existingIds.has(s.id)) list.push(s);
+    // 데모 영상은 실제 구독 채널이 하나도 없을 때(둘러보기)만 보여 준다.
+    if (!hasRealChannels) {
+      const existingIds = new Set(list.map((v) => v.id));
+      for (const s of SAMPLE_VIDEOS) {
+        if (!existingIds.has(s.id)) list.push(s);
+      }
     }
 
     if (selectedCategory === 'all') return list;
@@ -429,7 +443,7 @@ export default function HomeScreenFeed() {
       const cat = categoryById.get(v.categoryId);
       return cat?.parentId === selectedCategory;
     });
-  }, [channels, recentVideos, selectedCategory, categoryById, thumbQuality, refreshTick]);
+  }, [channels, recentVideos, selectedCategory, categoryById, thumbQuality, refreshTick, hasRealChannels]);
 
   // 쇼츠 목록
   const feedShorts = useMemo(() => {
@@ -454,7 +468,7 @@ export default function HomeScreenFeed() {
       }
     }
     real.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
-    const source: FeedVideoItem[] = real.length > 0 ? real.slice(0, 40) : SAMPLE_SHORTS;
+    const source: FeedVideoItem[] = real.length > 0 || hasRealChannels ? real.slice(0, 40) : SAMPLE_SHORTS;
     if (selectedCategory === 'all') return source;
     return source.filter((s) => {
       if (!s.categoryId) return false;
@@ -808,6 +822,18 @@ export default function HomeScreenFeed() {
                   colors={['#ff0033']}
                 />
               }>
+              {!shortsOnly && hasRealChannels && feedVideos.length === 0 && (
+                <View style={styles.feedEmpty}>
+                  <Text style={[styles.feedEmptyTitle, { color: theme.text }]}>아직 이 기기에 최신 영상이 없어요</Text>
+                  <Text style={[styles.feedEmptyBody, { color: theme.textSecondary }]}>
+                    [구독] 화면의 ⏰ 를 눌러 확인하면 채널별 최신 영상이 여기에 모여요. 다른 기기(컴퓨터 등)에서 확인한
+                    영상도 같은 계정이면 잠시 뒤 여기에 함께 나와요.
+                  </Text>
+                  <Pressable onPress={() => router.push('/subscriptions')} style={styles.feedEmptyBtn}>
+                    <Text style={styles.feedEmptyBtnText}>구독 화면으로</Text>
+                  </Pressable>
+                </View>
+              )}
               {/* 일반 영상 그리드 (상단 행) */}
               {!shortsOnly && (
                 <View style={[styles.videoGrid, isMobile && styles.videoGridMobile]}>
@@ -972,9 +998,11 @@ function VideoCard({
       style={({ pressed }) => [styles.videoCard, isMobile && styles.videoCardMobile, pressed && { opacity: 0.9 }]}>
       <View style={styles.thumbBox}>
         <Image source={{ uri: item.thumbnail }} style={styles.thumbImage} resizeMode="cover" />
-        <View style={styles.durationBadge}>
-          <Text style={styles.durationText}>{item.duration}</Text>
-        </View>
+        {item.duration ? (
+          <View style={styles.durationBadge}>
+            <Text style={styles.durationText}>{item.duration}</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.metaRow}>
@@ -996,7 +1024,7 @@ function VideoCard({
             <MaterialCommunityIcons name="check-circle" size={13} color={theme.textSecondary} />
           </View>
           <Text style={[styles.videoStats, { color: theme.textSecondary }]}>
-            {item.views} · {item.timeAgo}
+            {item.views ? `${item.views} · ${item.timeAgo}` : item.timeAgo}
           </Text>
         </View>
         {isRealVideoId(item.id) && <MoreButton onPress={() => onMore(item)} />}
@@ -1044,6 +1072,11 @@ function ShortsCard({
 }
 
 const styles = StyleSheet.create({
+  feedEmpty: { padding: 24, gap: 10, alignItems: 'flex-start' },
+  feedEmptyTitle: { fontSize: 17, fontWeight: '800' },
+  feedEmptyBody: { fontSize: 14, lineHeight: 21 },
+  feedEmptyBtn: { backgroundColor: '#ff0033', borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10 },
+  feedEmptyBtnText: { color: '#fff', fontWeight: '700' },
   root: { flex: 1, width: '100%', maxWidth: '100%', overflow: 'hidden' },
   layoutRow: { flex: 1, flexDirection: 'row', width: '100%', maxWidth: '100%', overflow: 'hidden' },
 

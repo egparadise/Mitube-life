@@ -4,6 +4,7 @@ import Head from 'expo-router/head';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Linking,
   Platform,
@@ -38,7 +39,7 @@ import {
 } from '@/hooks/use-new-videos';
 import { useAlertScheduleSync, useInAppAlerts } from '@/hooks/use-alerts';
 import { useTheme } from '@/hooks/use-theme';
-import { initialSync, pushChanges } from '@/services/cloud-sync';
+import { syncNow } from '@/services/cloud-sync';
 import { channelUrl } from '@/services/youtube';
 import { canRequestYouTubeToken, loadGsi } from '@/services/google-gsi';
 import { isValidYouTubeApiKey, useStore } from '@/store/store';
@@ -215,8 +216,7 @@ export default function HomeScreen() {
       if (uid) {
         try {
           // 이 기기에서 바뀐 내용을 먼저 올린 뒤 내려받는다 (안 그러면 올라가기 전 변경이 지워진다).
-          await pushChanges(uid);
-          await initialSync(uid);
+          await syncNow(uid);
         } catch {}
       }
       if (readAuthFromStore()) {
@@ -244,6 +244,33 @@ export default function HomeScreen() {
     setSelectedSub(null);
     if (s.baselineAt != null) s.markSeen(key);
     onRefresh();
+  };
+
+  // 분류함 지우기: 그 분류함(대분류면 하위까지)의 채널은 모두 미분류로 간다.
+  const deleteCategory = useStore((s) => s.deleteCategory);
+  const confirmDelete = (id: string) => {
+    const cat = categoryById.get(id);
+    if (!cat) return;
+    const subs = categories.filter((c) => c.parentId === id);
+    const ids = new Set([id, ...subs.map((c) => c.id)]);
+    const n = channels.filter((ch) => ch.categoryId && ids.has(ch.categoryId)).length;
+    const msg =
+      `'${cat.name}' 분류함을 지울까요?` +
+      (subs.length > 0 ? `\n하위 분류함 ${subs.length}개도 함께 지워져요.` : '') +
+      `\n들어 있던 채널 ${n}개는 미분류로 옮겨져요.`;
+    const run = () => {
+      deleteCategory(id);
+      setSelectedSub(null);
+      if (!cat.parentId) setSelected(null);
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm(msg)) run();
+    } else {
+      Alert.alert('분류함 삭제', msg, [
+        { text: '취소', style: 'cancel' },
+        { text: '삭제', style: 'destructive', onPress: run },
+      ]);
+    }
   };
 
   const handleAdd = (name: string, emoji: string, color: string) => {
@@ -401,6 +428,19 @@ export default function HomeScreen() {
                   · ⏰ 를 누르면 채널마다 최신 영상이 함께 보여요
                 </ThemedText>
               )}
+              {activeKey !== NONE && (activeSub ?? activeTab) && (
+                <Pressable
+                  onPress={() => confirmDelete(activeSub ? activeSub.key : activeKey)}
+                  hitSlop={8}
+                  role="button"
+                  aria-label={`${(activeSub ?? activeTab)?.label} 분류함 삭제`}
+                  style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.6 }]}>
+                  <MaterialCommunityIcons name="trash-can-outline" size={15} color="#ef4444" />
+                  <ThemedText type="small" style={{ color: '#ef4444' }}>
+                    {activeSub ? '하위 분류함 삭제' : '분류함 삭제'}
+                  </ThemedText>
+                </Pressable>
+              )}
             </View>
 
             <View style={styles.listArea}>
@@ -538,8 +578,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, lineHeight: 34, fontWeight: '600' },
   titleCompact: { fontSize: 24, lineHeight: 30 },
   summary: { fontSize: 12, lineHeight: 16 },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 'auto' },
   listHeader: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'baseline',
     gap: 6,
     marginTop: Spacing.three,

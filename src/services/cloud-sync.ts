@@ -154,6 +154,9 @@ async function fetchAll(table: string): Promise<Row[]> {
 
 /** 바뀐 행만 올리고, 기기에서 지운 행은 클라우드에서도 지운다. */
 export async function pushChanges(uid: string): Promise<void> {
+  // 이 기기가 이 계정과 처음 맞추기(initialSync) 전이면 올리지 않는다.
+  // (아직 클라우드를 받지 않은 기기가 오래된 기기 데이터를 통째로 올려 덮어쓰는 것을 막는다)
+  if (!pushed || pushed.uid !== uid) return;
   const sb = requireSupabase();
   const snap = snapshot(uid);
   const prev = pushed && pushed.uid === uid ? pushed : null;
@@ -287,6 +290,15 @@ export async function initialSync(uid: string): Promise<void> {
 
   // 회원 정보: 마지막 접속 시각
   await sb.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', uid);
+}
+
+/**
+ * 지금 바로 맞추기: 이 기기의 바뀐 내용을 먼저 올리고(처음 맞춘 뒤에만), 클라우드 최신을 받는다.
+ * 화면의 새로고침·탭 전환 등에서 쓴다. initialSync 를 바로 부르면 아직 안 올린 변경이 지워진다.
+ */
+export async function syncNow(uid: string): Promise<void> {
+  await pushChanges(uid);
+  await initialSync(uid);
 }
 
 /** 이후 기기에서 바뀌는 내용을 자동으로 올린다. 멈추는 함수를 돌려준다. */

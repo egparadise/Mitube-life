@@ -402,7 +402,7 @@ export default function SettingsScreen() {
           </View>
           <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
             분류함을 눌러 이름·아이콘·색상을 바꾸거나 삭제할 수 있어요. "+ 하위"로 하위 분류함을 만들어요.
-            하위를 지우면 그 채널은 상위로 올라가고, 상위를 지우면 하위도 함께 지워져 채널은 미분류로 가요.
+            분류함을 지우면 그 안의 채널은 미분류로 가요 (상위를 지우면 하위도 함께 지워져요). 구독 화면 목록 위의 "분류함 삭제"로도 지울 수 있어요.
           </ThemedText>
 
           {/* 데이터 */}

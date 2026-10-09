@@ -351,11 +351,10 @@ export const useStore = create<AppState>()(
         const target = categories.find((c) => c.id === id);
         if (!target) return;
         if (target.parentId) {
-          // 하위 분류함: 채널은 상위 분류함으로 올린다.
-          const parentId = target.parentId;
+          // 하위 분류함: 그 채널은 미분류로 보낸다 (사용자 요청 2026-10-09).
           set({
             categories: categories.filter((c) => c.id !== id),
-            channels: get().channels.map((ch) => (ch.categoryId === id ? { ...ch, categoryId: parentId } : ch)),
+            channels: get().channels.map((ch) => (ch.categoryId === id ? { ...ch, categoryId: null } : ch)),
           });
           return;
         }
