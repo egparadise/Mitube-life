@@ -38,7 +38,7 @@ import {
 } from '@/hooks/use-new-videos';
 import { useAlertScheduleSync, useInAppAlerts } from '@/hooks/use-alerts';
 import { useTheme } from '@/hooks/use-theme';
-import { initialSync } from '@/services/cloud-sync';
+import { initialSync, pushChanges } from '@/services/cloud-sync';
 import { channelUrl } from '@/services/youtube';
 import { canRequestYouTubeToken, loadGsi } from '@/services/google-gsi';
 import { isValidYouTubeApiKey, useStore } from '@/store/store';
@@ -214,6 +214,8 @@ export default function HomeScreen() {
       const uid = useStore.getState().syncedUserId;
       if (uid) {
         try {
+          // 이 기기에서 바뀐 내용을 먼저 올린 뒤 내려받는다 (안 그러면 올라가기 전 변경이 지워진다).
+          await pushChanges(uid);
           await initialSync(uid);
         } catch {}
       }

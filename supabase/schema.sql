@@ -221,3 +221,20 @@ as $$
 $$;
 revoke all on function public.is_username_available(text) from public;
 grant execute on function public.is_username_available(text) to anon, authenticated;
+
+-- ============================================================
+-- 6) 채널별 최신 영상 (한 기기가 YouTube 에서 받아 오면 다른 기기는 여기서 읽는다)
+--    휴대폰·태블릿이 각자 YouTube 권한을 받지 않아도 같은 썸네일을 보고, API 사용량도 아낀다.
+-- ============================================================
+create table if not exists public.recent_videos (
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  channel_id  text not null,
+  videos      jsonb not null default '[]'::jsonb,   -- [{id, title, thumbnail, publishedAt, isShort}]
+  updated_at  timestamptz not null default now(),
+  primary key (user_id, channel_id)
+);
+alter table public.recent_videos enable row level security;
+drop policy if exists "own recent videos" on public.recent_videos;
+create policy "own recent videos" on public.recent_videos
+  for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));

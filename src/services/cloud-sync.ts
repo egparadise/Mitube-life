@@ -14,10 +14,10 @@ import { AppState, Platform } from 'react-native';
 import { DefaultCategories } from '@/constants/categories';
 import { requireSupabase } from '@/services/supabase';
 import { isValidYouTubeApiKey, useStore } from '@/store/store';
-import { Category, Channel, ChannelAlert } from '@/types';
+import { Category, Channel, ChannelAlert, Video } from '@/types';
 
 type Row = Record<string, unknown>;
-type Table = 'categories' | 'channels' | 'channel_alerts';
+type Table = 'categories' | 'channels' | 'channel_alerts' | 'recent_videos';
 
 const PUSH_DELAY_MS = 1500;
 const CHUNK = 500;
@@ -77,9 +77,27 @@ const toAlert = (r: Row): ChannelAlert => ({
 });
 
 /** 지금 기기 상태를 테이블별 행(키 → 행)으로. */
+/** 실제 YouTube 채널 id (데모 채널·샘플 영상은 올리지 않는다). */
+const isRealChannel = (id: string) => /^UC[\w-]{10,}$/.test(id);
+
+const recentRow = (uid: string, channelId: string, videos: Video[]): Row => ({
+  user_id: uid,
+  channel_id: channelId,
+  videos: videos.filter((v) => !v.id.startsWith('sample-')),
+});
+
+/** 가장 최근 영상의 게시 시각 (비교용). */
+const newestAt = (videos: Video[] | undefined) =>
+  (videos ?? []).reduce((m, v) => (v.publishedAt > m ? v.publishedAt : m), '');
+
 function snapshot(uid: string) {
   const s = useStore.getState();
   return {
+    recent_videos: new Map(
+      Object.entries(s.recentVideos)
+        .filter(([id, list]) => isRealChannel(id) && list.some((v) => !v.id.startsWith('sample-')))
+        .map(([id, list]) => [id, recentRow(uid, id, list)]),
+    ),
     categories: new Map(s.categories.map((c) => [c.id, categoryRow(uid, c)])),
     channels: new Map(s.channels.map((c) => [c.id, channelRow(uid, c)])),
     channel_alerts: new Map(Object.entries(s.channelAlerts).map(([id, a]) => [id, alertRow(uid, id, a)])),
@@ -102,12 +120,22 @@ function remember(uid: string, snap: ReturnType<typeof snapshot>) {
   const json = (m: Map<string, Row>) => new Map([...m].map(([k, v]) => [k, JSON.stringify(v)]));
   pushed = {
     uid,
-    tables: { categories: json(snap.categories), channels: json(snap.channels), channel_alerts: json(snap.channel_alerts) },
+    tables: {
+      categories: json(snap.categories),
+      channels: json(snap.channels),
+      channel_alerts: json(snap.channel_alerts),
+      recent_videos: json(snap.recent_videos),
+    },
     settings: JSON.stringify(snap.settings),
   };
 }
 
-const KEY_COLUMN: Record<Table, string> = { categories: 'id', channels: 'id', channel_alerts: 'channel_id' };
+const KEY_COLUMN: Record<Table, string> = {
+  categories: 'id',
+  channels: 'id',
+  channel_alerts: 'channel_id',
+  recent_videos: 'channel_id',
+};
 
 async function fetchAll(table: string): Promise<Row[]> {
   const sb = requireSupabase();
@@ -127,7 +155,7 @@ export async function pushChanges(uid: string): Promise<void> {
   const prev = pushed && pushed.uid === uid ? pushed : null;
   const now = new Date().toISOString();
 
-  for (const table of ['categories', 'channels', 'channel_alerts'] as Table[]) {
+  for (const table of ['categories', 'channels', 'channel_alerts', 'recent_videos'] as Table[]) {
     const rows = snap[table];
     const before = prev?.tables[table] ?? new Map<string, string>();
     const changed = [...rows].filter(([k, r]) => before.get(k) !== JSON.stringify(r)).map(([, r]) => ({ ...r, updated_at: now }));
@@ -157,11 +185,13 @@ export async function pushChanges(uid: string): Promise<void> {
 /** 로그인 직후 한 번: 클라우드와 기기 데이터를 맞춘다 (규칙은 파일 맨 위 설명). */
 export async function initialSync(uid: string): Promise<void> {
   const sb = requireSupabase();
-  const [cats, chs, als, settingsRes] = await Promise.all([
+  const [cats, chs, als, settingsRes, rvs] = await Promise.all([
     fetchAll('categories'),
     fetchAll('channels'),
     fetchAll('channel_alerts'),
     sb.from('user_settings').select('*').maybeSingle(),
+    // 예전 스키마(표 없음)에서도 나머지 동기화는 되도록 실패는 빈 목록으로.
+    fetchAll('recent_videos').catch(() => [] as Row[]),
   ]);
   if (settingsRes.error) throw settingsRes.error;
   const cloudSettings = (settingsRes.data ?? {}) as Row;
@@ -221,6 +251,21 @@ export async function initialSync(uid: string): Promise<void> {
     // 다른 계정의 기기 전용 기록(최신 영상·알림 발송 기록)은 지운다.
     useStore.setState({ recentVideos: {}, alertFiredAt: {} });
   }
+  // 다른 기기가 받아 둔 최신 영상: 이 기기에 없거나 더 오래된 채널만 클라우드 것으로 채운다.
+  {
+    const mine = useStore.getState().recentVideos;
+    const merged = { ...mine };
+    let changed = false;
+    for (const r of rvs) {
+      const id = String(r.channel_id);
+      const list = (r.videos as Video[] | null) ?? [];
+      if (list.length > 0 && newestAt(list) > newestAt(mine[id]?.filter((v) => !v.id.startsWith('sample-')))) {
+        merged[id] = list;
+        changed = true;
+      }
+    }
+    if (changed) useStore.setState({ recentVideos: merged });
+  }
   useStore.getState().setSyncedUserId(uid);
 
   // 클라우드에 이미 있는 행은 '올린 것'으로 두고, 합치면서 생긴 차이만 올린다.
@@ -228,6 +273,9 @@ export async function initialSync(uid: string): Promise<void> {
     categories: new Map(cats.map((r) => [String(r.id), categoryRow(uid, toCategory(r))])),
     channels: new Map(chs.map((r) => [String(r.id), channelRow(uid, toChannel(r))])),
     channel_alerts: new Map(als.map((r) => [String(r.channel_id), alertRow(uid, String(r.channel_id), toAlert(r))])),
+    recent_videos: new Map(
+      rvs.map((r) => [String(r.channel_id), recentRow(uid, String(r.channel_id), (r.videos as Video[]) ?? [])]),
+    ),
     settings: {} as Row,
   };
   remember(uid, cloudSnap);
@@ -278,6 +326,7 @@ export function startAutoSync(uid: string): () => void {
       s.youtubeConnected !== p.youtubeConnected ||
       s.youtubeApiKey !== p.youtubeApiKey ||
       s.seenAt !== p.seenAt ||
+      s.recentVideos !== p.recentVideos ||
       s.baselineAt !== p.baselineAt ||
       s.lastCheckedAt !== p.lastCheckedAt
     ) {
@@ -285,10 +334,29 @@ export function startAutoSync(uid: string): () => void {
     }
   });
 
-  // 다른 기기(PC/스마트폰/태블릿)에서 수정한 내용을 즉시 반영하기 위한 포커스/활성화 감지
-  const onFocusOrActive = () => {
-    if (!running) {
-      initialSync(uid).catch(() => {});
+  // 다른 기기(PC/스마트폰/태블릿)에서 수정한 내용을 반영하기 위한 포커스/활성화 감지.
+  // 내려받기는 클라우드 기준으로 덮어쓰므로, 반드시 이 기기에서 바뀐 내용을 먼저 올린 뒤에 한다
+  // (안 그러면 방금 추가한 분류함이 올라가기 전에 지워진다).
+  let lastPull = 0;
+  const onFocusOrActive = async () => {
+    if (running || Date.now() - lastPull < 3000) return;
+    lastPull = Date.now();
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    running = true;
+    try {
+      await pushChanges(uid);
+      await initialSync(uid);
+    } catch {
+      // 다음 기회에 다시 맞춘다.
+    } finally {
+      running = false;
+      if (again) {
+        again = false;
+        schedule();
+      }
     }
   };
 
@@ -316,9 +384,7 @@ export function startAutoSync(uid: string): () => void {
         'postgres_changes',
         { event: '*', schema: 'public', filter: `user_id=eq.${uid}` },
         () => {
-          if (!running) {
-            initialSync(uid).catch(() => {});
-          }
+          onFocusOrActive();
         },
       )
       .subscribe();
