@@ -169,7 +169,14 @@ security definer
 set search_path = ''
 as $$
 begin
-  -- 운영자 이메일로 처음 가입하면 바로 관리자, 나머지는 일반 회원.
+  -- 운영자 이메일은 구글 로그인(구글이 이메일 소유를 확인)으로만 가입할 수 있다.
+  -- 이메일 확인을 생략하는 이메일 가입으로 남이 운영자 주소를 먼저 차지하지 못하게 막는다.
+  if lower(coalesce(new.email, '')) = 'egparadise@gmail.com'
+     and coalesce(new.raw_app_meta_data ->> 'provider', '') <> 'google' then
+    raise exception '이 이메일은 Google 로그인으로만 가입할 수 있습니다';
+  end if;
+
+  -- 운영자 이메일로 구글 가입하면 바로 관리자, 나머지는 일반 회원.
   insert into public.profiles (id, email, phone, display_name, avatar_url, role)
   values (
     new.id,
@@ -177,7 +184,11 @@ begin
     new.phone,
     coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name'),
     new.raw_user_meta_data ->> 'avatar_url',
-    case when lower(coalesce(new.email, '')) = 'egparadise@gmail.com' then 'admin' else 'member' end
+    case
+      when lower(coalesce(new.email, '')) = 'egparadise@gmail.com'
+        and new.raw_app_meta_data ->> 'provider' = 'google' then 'admin'
+      else 'member'
+    end
   )
   on conflict (id) do nothing;
 

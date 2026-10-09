@@ -589,10 +589,7 @@ export default function HomeScreenFeed() {
                   <View key={topCat.id} style={styles.catGroup}>
                     {/* 대분류 항목 */}
                     <Pressable
-                      onPress={() => {
-                        setSelectedCategory(topCat.id);
-                        setShortsOnly(false);
-                      }}
+                      onPress={() => handleCategoryClick(topCat.id)}
                       style={[
                         styles.catItemRow,
                         isSelected && [styles.sideMenuActive, { backgroundColor: theme.backgroundSelected }],
@@ -633,10 +630,7 @@ export default function HomeScreenFeed() {
                           return (
                             <Pressable
                               key={sub.id}
-                              onPress={() => {
-                                setSelectedCategory(sub.id);
-                                setShortsOnly(false);
-                              }}
+                              onPress={() => handleCategoryClick(sub.id)}
                               style={[
                                 styles.subCatRow,
                                 isSubSelected && {
@@ -722,10 +716,7 @@ export default function HomeScreenFeed() {
           <View style={[styles.chipBar, { backgroundColor: theme.background }]}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
               <Pressable
-                onPress={() => {
-                  setSelectedCategory('all');
-                  setShortsOnly(false);
-                }}
+                onPress={handleHomeClick}
                 style={[
                   styles.chipItem,
                   { backgroundColor: theme.backgroundElement },
@@ -746,10 +737,7 @@ export default function HomeScreenFeed() {
                 return (
                   <Pressable
                     key={cat.id}
-                    onPress={() => {
-                      setSelectedCategory(cat.id);
-                      setShortsOnly(false);
-                    }}
+                    onPress={() => handleCategoryClick(cat.id)}
                     style={[
                       styles.chipItem,
                       { backgroundColor: theme.backgroundElement },
@@ -773,7 +761,18 @@ export default function HomeScreenFeed() {
           {library ? (
             <LibraryView kind={library} />
           ) : (
-            <ScrollView contentContainerStyle={styles.feedContent} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              ref={feedScrollRef}
+              contentContainerStyle={[styles.feedContent, isMobile && styles.feedContentMobile]}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={triggerRefresh}
+                  tintColor="#ff0033"
+                  colors={['#ff0033']}
+                />
+              }>
               {/* 일반 영상 그리드 (상단 행) */}
               {!shortsOnly && (
                 <View style={[styles.videoGrid, isMobile && styles.videoGridMobile]}>
@@ -799,6 +798,14 @@ export default function HomeScreenFeed() {
                   <Text style={[styles.shortsSub, { color: theme.textSecondary, paddingVertical: 24 }]}>
                     ⏳ 오늘 정한 Shorts 시간({shortsLimitMin}분)을 다 봤어요. 내일 다시 볼 수 있어요.
                   </Text>
+                ) : shortsOnly && isMobile ? (
+                  <View style={styles.shortsGridMobile}>
+                    {feedShorts.map((short) => (
+                      <View key={short.id} style={styles.shortsGridCol}>
+                        <ShortsCard item={short} onMore={setSaveTarget} fullWidth />
+                      </View>
+                    ))}
+                  </View>
                 ) : (
                   <ScrollView
                     horizontal
@@ -919,7 +926,15 @@ function VideoCard({
 }
 
 /** 9:16 유튜브 세로형 쇼츠 카드 */
-function ShortsCard({ item, onMore }: { item: FeedVideoItem; onMore: (item: FeedVideoItem) => void }) {
+function ShortsCard({
+  item,
+  onMore,
+  fullWidth,
+}: {
+  item: FeedVideoItem;
+  onMore: (item: FeedVideoItem) => void;
+  fullWidth?: boolean;
+}) {
   return (
     <Pressable
       onPress={() =>
@@ -927,7 +942,11 @@ function ShortsCard({ item, onMore }: { item: FeedVideoItem; onMore: (item: Feed
           ? openVideo(toSaved({ ...item, isShort: true }))
           : Linking.openURL('https://www.youtube.com/shorts')
       }
-      style={({ pressed }) => [styles.shortsCard, pressed && { opacity: 0.9 }]}>
+      style={({ pressed }) => [
+        styles.shortsCard,
+        fullWidth && styles.shortsCardFull,
+        pressed && { opacity: 0.9 },
+      ]}>
       <Image source={{ uri: item.thumbnail }} style={styles.shortsThumb} resizeMode="cover" />
       <LinearGradient colors={['transparent', 'rgba(0,0,0,0.85)']} style={styles.shortsOverlay}>
         <Text style={styles.shortsCardTitle} numberOfLines={3}>
@@ -1105,6 +1124,9 @@ const styles = StyleSheet.create({
   feedContent: {
     padding: 16,
   },
+  feedContentMobile: {
+    padding: 12,
+  },
 
   // 비디오 그리드
   videoGrid: {
@@ -1222,6 +1244,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#111',
+  },
+  shortsCardFull: {
+    width: '100%',
+    height: undefined,
+    aspectRatio: 9 / 16,
+  },
+  shortsGridMobile: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingTop: 4,
+  },
+  shortsGridCol: {
+    width: '48%',
+    flexGrow: 1,
   },
   shortsThumb: {
     width: '100%',

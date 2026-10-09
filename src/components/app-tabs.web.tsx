@@ -88,7 +88,8 @@ export function CustomTabList(props: TabListProps) {
   const openLanding = useStore((s) => s.openLanding);
   const { width } = useWindowDimensions();
   const isMobile = width < 540;
-  const isTiny = width < 380;
+  const isSmall = width < 420;
+  const isTiny = width < 360;
 
   return (
     <View {...props} style={[styles.tabListContainer, isMobile && { padding: 8 }]}>
@@ -96,7 +97,7 @@ export function CustomTabList(props: TabListProps) {
         type="backgroundElement"
         style={[
           styles.innerContainer,
-          isMobile && { paddingHorizontal: 10, paddingVertical: 6, gap: 6 },
+          isMobile && { paddingHorizontal: 8, paddingVertical: 5, gap: 6 },
         ]}>
         <Pressable
           onPress={() => openLanding('home')}
@@ -106,7 +107,7 @@ export function CustomTabList(props: TabListProps) {
           <View style={styles.brandRow}>
             <Image
               source={require('@/assets/images/mascot.webp')}
-              style={[styles.brandMascot, isTiny && { width: 22, height: 22 }]}
+              style={[styles.brandMascot, (isSmall || isTiny) && { width: 22, height: 22 }]}
               contentFit="contain"
             />
             {/* 좁은 화면에서는 검색창 자리를 위해 글자 로고를 숨긴다 */}
@@ -128,7 +129,7 @@ export function CustomTabList(props: TabListProps) {
           style={[
             styles.track,
             { backgroundColor: dark ? '#2a2c31' : '#e9e9ec' },
-            { width: isTiny ? 168 : isMobile ? 200 : 310 },
+            { width: isTiny ? 150 : isSmall ? 175 : isMobile ? 200 : 310 },
             isMobile && { height: 38 },
           ]}>
           {props.children}
