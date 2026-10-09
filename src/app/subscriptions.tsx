@@ -42,7 +42,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { syncNow } from '@/services/cloud-sync';
 import { channelUrl } from '@/services/youtube';
 import { canRequestYouTubeToken, loadGsi } from '@/services/google-gsi';
-import { isValidYouTubeApiKey, useStore } from '@/store/store';
+import { isValidYouTubeApiKey, useStore, ChannelSortOrder } from '@/store/store';
 import { Channel, Video } from '@/types';
 import { shortAlert } from '@/utils/alert-time';
 
@@ -73,6 +73,9 @@ export default function HomeScreen() {
   const channelAlerts = useStore((s) => s.channelAlerts);
   const importDemoChannels = useStore((s) => s.importDemoChannels);
   const addCategory = useStore((s) => s.addCategory);
+  const reorderCategories = useStore((s) => s.reorderCategories);
+  const channelSortOrder = useStore((s) => s.channelSortOrder);
+  const setChannelSortOrder = useStore((s) => s.setChannelSortOrder);
   const setConnectRequested = useStore((s) => s.setConnectRequested);
 
   const [settingsTarget, setSettingsTarget] = useState<Channel | null>(null);
@@ -145,6 +148,54 @@ export default function HomeScreen() {
   const activeChannels = activeSubKey
     ? tabChannels.filter((ch) => ch.categoryId === activeSubKey)
     : tabChannels;
+
+  // 대분류 탭 드래그 순서 변경
+  const handleReorderTabs = useCallback(
+    (orderedKeys: string[]) => {
+      const realIds = orderedKeys.filter((k) => k !== NONE);
+      reorderCategories(realIds, null);
+    },
+    [reorderCategories],
+  );
+
+  // 소분류 탭 드래그 순서 변경
+  const handleReorderSubTabs = useCallback(
+    (orderedKeys: string[]) => {
+      if (!activeKey || activeKey === NONE) return;
+      reorderCategories(orderedKeys, activeKey);
+    },
+    [activeKey, reorderCategories],
+  );
+
+  // 채널 정렬 (가나다/알파벳순, 최신 업로드순, 구독자순, 기본순)
+  const sortedChannels = useMemo(() => {
+    const list = [...activeChannels];
+    switch (channelSortOrder) {
+      case 'name-asc':
+        return list.sort((a, b) => a.title.localeCompare(b.title, 'ko', { sensitivity: 'base', numeric: true }));
+      case 'name-desc':
+        return list.sort((a, b) => b.title.localeCompare(a.title, 'ko', { sensitivity: 'base', numeric: true }));
+      case 'latest':
+        return list.sort((a, b) => {
+          const aVids = recentVideos[a.id] ?? [];
+          const bVids = recentVideos[b.id] ?? [];
+          const aTime = aVids[0]?.publishedAt ? new Date(aVids[0].publishedAt).getTime() : 0;
+          const bTime = bVids[0]?.publishedAt ? new Date(bVids[0].publishedAt).getTime() : 0;
+          if (bTime !== aTime) return bTime - aTime;
+          return a.title.localeCompare(b.title, 'ko', { sensitivity: 'base', numeric: true });
+        });
+      case 'subscribers':
+        return list.sort((a, b) => {
+          const aSub = a.subscriberCount ?? 0;
+          const bSub = b.subscriberCount ?? 0;
+          if (bSub !== aSub) return bSub - aSub;
+          return a.title.localeCompare(b.title, 'ko', { sensitivity: 'base', numeric: true });
+        });
+      case 'default':
+      default:
+        return list;
+    }
+  }, [activeChannels, channelSortOrder, recentVideos]);
 
   // 고른 탭이 사라져 다른 탭으로 넘어갔으면 그 탭을 '선택됨'으로 확정한다.
   // 안 그러면 사라졌던 미분류 탭이 다시 생길 때 보던 탭에서 갑자기 튕겨 나간다.
@@ -408,46 +459,175 @@ export default function HomeScreen() {
               activeSubKey={activeSubKey}
               onSelectSub={setSelectedSub}
               onAddSub={activeKey === NONE ? undefined : () => setAddMode({ parentId: activeKey })}
+              onReorderTabs={handleReorderTabs}
+              onReorderSubTabs={handleReorderSubTabs}
             />
 
             <View style={styles.listHeader}>
-              <ThemedText type="smallBold">
-                {activeTab?.label}
-                {activeSub ? ` › ${activeSub.label}` : subTabs.length > 0 ? ' (전체)' : ''}
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                채널 {activeChannels.length}개
-              </ThemedText>
-              {activeNew > 0 && (
-                <ThemedText type="small" style={styles.newText}>
-                  · 새 영상 {activeNew}개
-                </ThemedText>
-              )}
-              {baselineAt == null && (
-                <ThemedText type="small" themeColor="textSecondary">
-                  · ⏰ 를 누르면 채널마다 최신 영상이 함께 보여요
-                </ThemedText>
-              )}
-              {activeKey !== NONE && (activeSub ?? activeTab) && (
-                <Pressable
-                  onPress={() => confirmDelete(activeSub ? activeSub.key : activeKey)}
-                  hitSlop={8}
-                  role="button"
-                  aria-label={`${(activeSub ?? activeTab)?.label} 분류함 삭제`}
-                  style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.6 }]}>
-                  <MaterialCommunityIcons name="trash-can-outline" size={15} color="#ef4444" />
-                  <ThemedText type="small" style={{ color: '#ef4444' }}>
-                    {activeSub ? '하위 분류함 삭제' : '분류함 삭제'}
+              <View style={styles.listHeaderTopRow}>
+                <View style={styles.listTitleWrap}>
+                  <ThemedText type="smallBold">
+                    {activeTab?.label}
+                    {activeSub ? ` › ${activeSub.label}` : subTabs.length > 0 ? ' (전체)' : ''}
                   </ThemedText>
-                </Pressable>
-              )}
+                  <ThemedText type="small" themeColor="textSecondary">
+                    채널 {activeChannels.length}개
+                  </ThemedText>
+                  {activeNew > 0 && (
+                    <ThemedText type="small" style={styles.newText}>
+                      · 새 영상 {activeNew}개
+                    </ThemedText>
+                  )}
+                  {baselineAt == null && (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      · ⏰ 를 누르면 채널마다 최신 영상이 함께 보여요
+                    </ThemedText>
+                  )}
+                </View>
+                {activeKey !== NONE && (activeSub ?? activeTab) && (
+                  <Pressable
+                    onPress={() => confirmDelete(activeSub ? activeSub.key : activeKey)}
+                    hitSlop={8}
+                    role="button"
+                    aria-label={`${(activeSub ?? activeTab)?.label} 분류함 삭제`}
+                    style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.6 }]}>
+                    <MaterialCommunityIcons name="trash-can-outline" size={15} color="#ef4444" />
+                    <ThemedText type="small" style={{ color: '#ef4444' }}>
+                      {activeSub ? '하위 분류함 삭제' : '분류함 삭제'}
+                    </ThemedText>
+                  </Pressable>
+                )}
+              </View>
+
+              {/* 채널 정렬 옵션 바 */}
+              <View style={styles.sortBar}>
+                <View style={styles.sortBarLabelWrap}>
+                  <MaterialCommunityIcons name="sort" size={15} color={theme.textSecondary} />
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.sortBarLabel}>
+                    채널 정렬:
+                  </ThemedText>
+                </View>
+                <View style={styles.sortChipsRow}>
+                  <Pressable
+                    role="button"
+                    aria-label="가나다순 정렬"
+                    onPress={() =>
+                      setChannelSortOrder(
+                        channelSortOrder === 'name-asc' ? 'name-desc' : 'name-asc',
+                      )
+                    }
+                    style={({ pressed }) => [
+                      styles.sortChip,
+                      { borderColor: theme.backgroundSelected },
+                      (channelSortOrder === 'name-asc' || channelSortOrder === 'name-desc') && {
+                        backgroundColor: theme.text,
+                        borderColor: theme.text,
+                      },
+                      pressed && { opacity: 0.8 },
+                    ]}>
+                    <ThemedText
+                      type="small"
+                      style={[
+                        styles.sortChipText,
+                        { color: theme.textSecondary },
+                        (channelSortOrder === 'name-asc' || channelSortOrder === 'name-desc') && {
+                          color: theme.background,
+                          fontWeight: '700',
+                        },
+                      ]}>
+                      {channelSortOrder === 'name-desc' ? '가나다순 (ㅎ~ㄱ)' : '가나다순 (ㄱ~ㅎ)'}
+                    </ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    role="button"
+                    aria-label="최신 영상순 정렬"
+                    onPress={() => setChannelSortOrder('latest')}
+                    style={({ pressed }) => [
+                      styles.sortChip,
+                      { borderColor: theme.backgroundSelected },
+                      channelSortOrder === 'latest' && {
+                        backgroundColor: theme.text,
+                        borderColor: theme.text,
+                      },
+                      pressed && { opacity: 0.8 },
+                    ]}>
+                    <ThemedText
+                      type="small"
+                      style={[
+                        styles.sortChipText,
+                        { color: theme.textSecondary },
+                        channelSortOrder === 'latest' && {
+                          color: theme.background,
+                          fontWeight: '700',
+                        },
+                      ]}>
+                      최신 영상순
+                    </ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    role="button"
+                    aria-label="구독자순 정렬"
+                    onPress={() => setChannelSortOrder('subscribers')}
+                    style={({ pressed }) => [
+                      styles.sortChip,
+                      { borderColor: theme.backgroundSelected },
+                      channelSortOrder === 'subscribers' && {
+                        backgroundColor: theme.text,
+                        borderColor: theme.text,
+                      },
+                      pressed && { opacity: 0.8 },
+                    ]}>
+                    <ThemedText
+                      type="small"
+                      style={[
+                        styles.sortChipText,
+                        { color: theme.textSecondary },
+                        channelSortOrder === 'subscribers' && {
+                          color: theme.background,
+                          fontWeight: '700',
+                        },
+                      ]}>
+                      구독자순
+                    </ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    role="button"
+                    aria-label="기본순 정렬"
+                    onPress={() => setChannelSortOrder('default')}
+                    style={({ pressed }) => [
+                      styles.sortChip,
+                      { borderColor: theme.backgroundSelected },
+                      channelSortOrder === 'default' && {
+                        backgroundColor: theme.text,
+                        borderColor: theme.text,
+                      },
+                      pressed && { opacity: 0.8 },
+                    ]}>
+                    <ThemedText
+                      type="small"
+                      style={[
+                        styles.sortChipText,
+                        { color: theme.textSecondary },
+                        channelSortOrder === 'default' && {
+                          color: theme.background,
+                          fontWeight: '700',
+                        },
+                      ]}>
+                      기본순
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
             </View>
 
             <View style={styles.listArea}>
               <FlatList
-                // 탭을 바꾸면 새로 그려 스크롤을 맨 위로 되돌린다.
-                key={`${activeKey}:${activeSubKey ?? 'all'}`}
-                data={activeChannels}
+                // 탭 또는 정렬 기준을 바꾸면 새로 그려 스크롤을 맨 위로 되돌린다.
+                key={`${activeKey}:${activeSubKey ?? 'all'}:${channelSortOrder}`}
+                data={sortedChannels}
                 keyExtractor={(ch) => ch.id}
                 ItemSeparatorComponent={Separator}
                 contentContainerStyle={styles.listContent}
@@ -580,12 +760,53 @@ const styles = StyleSheet.create({
   summary: { fontSize: 12, lineHeight: 16 },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 'auto' },
   listHeader: {
+    marginTop: Spacing.three,
+    marginBottom: Spacing.two,
+    gap: 8,
+  },
+  listHeaderTopRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  listTitleWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'baseline',
     gap: 6,
-    marginTop: Spacing.three,
-    marginBottom: Spacing.two,
+  },
+  sortBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 4,
+  },
+  sortBarLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  sortBarLabel: {
+    fontSize: 12,
+  },
+  sortChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sortChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
+  },
+  sortChipText: {
+    fontSize: 12,
   },
   newText: { color: '#ff0033', fontWeight: '700' },
   banner: {

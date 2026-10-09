@@ -14,6 +14,9 @@ import { AdminSettings, Category, Channel, ChannelAlert, Playlist, SavedVideo, V
  */
 export const isValidYouTubeApiKey = (key: string | null | undefined) => /^AIza[0-9A-Za-z_-]{30,}$/.test((key ?? '').trim());
 
+/** 채널 정렬 기준: 가나다/알파벳순(오름/내림차순), 최신 업로드순, 구독자순, 기본 등록순 */
+export type ChannelSortOrder = 'name-asc' | 'name-desc' | 'latest' | 'subscribers' | 'default';
+
 export const DefaultAdminSettings: AdminSettings = {
   dailyLimitOn: false,
   dailyLimitMin: 60,
@@ -164,6 +167,12 @@ interface AppState {
   addCategory: (name: string, emoji?: string, color?: string, parentId?: string | null) => string;
   updateCategory: (id: string, patch: Partial<Pick<Category, 'name' | 'emoji' | 'color'>>) => void;
   deleteCategory: (id: string) => void;
+  /** 드래그 등으로 대분류/소분류의 순서를 바꾼다. */
+  reorderCategories: (orderedIds: string[], parentId?: string | null) => void;
+
+  // --- 채널 정렬 ---
+  channelSortOrder: ChannelSortOrder;
+  setChannelSortOrder: (order: ChannelSortOrder) => void;
 
   // --- 채널 ---
   /** 데모 구독 목록을 불러와 자동 분류. */
@@ -368,6 +377,21 @@ export const useStore = create<AppState>()(
         });
       },
 
+      reorderCategories: (orderedIds, parentId = null) => {
+        const idToOrder = new Map(orderedIds.map((id, index) => [id, index]));
+        const categories = get().categories.map((c) => {
+          const matchesParent = (c.parentId ?? null) === (parentId ?? null);
+          if (matchesParent && idToOrder.has(c.id)) {
+            return { ...c, order: idToOrder.get(c.id)! };
+          }
+          return c;
+        });
+        set({ categories });
+      },
+
+      channelSortOrder: 'default',
+      setChannelSortOrder: (order) => set({ channelSortOrder: order }),
+
       importDemoChannels: () => {
         const classified = classifyChannels(MockChannels, get().categories);
         // 이미 있는 채널은 사용자가 옮겨둔 분류를 보존하고, 새 채널만 추가.
@@ -463,6 +487,7 @@ export const useStore = create<AppState>()(
         usage: state.usage,
         introDone: state.introDone,
         syncedUserId: state.syncedUserId,
+        channelSortOrder: state.channelSortOrder,
       }),
       version: 1,
       // v1: Claude 가 검토한 채널 분류를 한 번 적용 (없는 채널·분류함은 건드리지 않음).

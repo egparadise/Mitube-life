@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -35,6 +36,10 @@ interface Props {
   onSelectSub?: (key: string | null) => void;
   /** 하위 줄의 보라 '추가'. 없으면 하위 줄을 그리지 않는다 (미분류 탭 등). */
   onAddSub?: () => void;
+  /** 대분류 탭 드래그 앤 드롭으로 순서 변경 시 호출 */
+  onReorderTabs?: (orderedKeys: string[]) => void;
+  /** 소분류 탭 드래그 앤 드롭으로 순서 변경 시 호출 */
+  onReorderSubTabs?: (orderedKeys: string[]) => void;
 }
 
 /** 탭 아래 기준선 그라데이션 (보라 → 분홍 → 주황). */
@@ -57,6 +62,8 @@ export function CategoryTabs({
   activeSubKey = null,
   onSelectSub,
   onAddSub,
+  onReorderTabs,
+  onReorderSubTabs,
 }: Props) {
   const dark = useColorScheme() === 'dark';
   const compact = useWindowDimensions().width < 700;
@@ -67,6 +74,12 @@ export function CategoryTabs({
   const scrollRef = useRef<ScrollView>(null);
   const tabPos = useRef(new Map<string, { x: number; w: number }>());
   const [viewWidth, setViewWidth] = useState(0);
+
+  // 마우스 드래그 앤 드롭 상태 (대분류 및 소분류)
+  const [draggedKey, setDraggedKey] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+  const [draggedSubKey, setDraggedSubKey] = useState<string | null>(null);
+  const [dragOverSubKey, setDragOverSubKey] = useState<string | null>(null);
 
   // 웹: 마우스 세로 휠로도 탭 줄을 가로로 넘길 수 있게 한다 (가로 스크롤바는 숨겨져 있음).
   useEffect(() => {
@@ -92,12 +105,11 @@ export function CategoryTabs({
 
   return (
     <View>
-      {/* 상위 분류함 탭 */}
+      {/* 상위 분류함 탭 (마우스 드래그로 순서 변경 가능) */}
       <ScrollView
         ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        // iOS 상태바 탭 → 맨 위로 스크롤은 채널 목록이 받도록 이 가로 스크롤은 빠진다.
         scrollsToTop={false}
         style={styles.scroller}
         contentContainerStyle={styles.row}
@@ -106,6 +118,10 @@ export function CategoryTabs({
         {tabs.map((tab, i) => {
           const active = tab.key === activeKey;
           const bg = active ? tab.color : idle(tab.color);
+          const isDraggable = tab.key !== '__none__';
+          const isDragging = draggedKey === tab.key;
+          const isDragOver = dragOverKey === tab.key;
+
           return (
             <Pressable
               key={tab.key}
@@ -116,6 +132,45 @@ export function CategoryTabs({
               role="tab"
               aria-selected={active}
               aria-label={tab.count != null ? `${tab.label} ${tab.count}개` : tab.label}
+              {...(Platform.OS === 'web' && isDraggable
+                ? {
+                    draggable: true,
+                    onDragStart: (e: any) => {
+                      e.dataTransfer.setData('text/plain', tab.key);
+                      e.dataTransfer.effectAllowed = 'move';
+                      setDraggedKey(tab.key);
+                    },
+                    onDragOver: (e: any) => {
+                      if (!draggedKey || draggedKey === tab.key || tab.key === '__none__') return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      if (dragOverKey !== tab.key) setDragOverKey(tab.key);
+                    },
+                    onDragLeave: () => {
+                      if (dragOverKey === tab.key) setDragOverKey(null);
+                    },
+                    onDrop: (e: any) => {
+                      e.preventDefault();
+                      const sourceKey = e.dataTransfer.getData('text/plain') || draggedKey;
+                      setDraggedKey(null);
+                      setDragOverKey(null);
+                      if (!sourceKey || sourceKey === tab.key || tab.key === '__none__') return;
+                      const validKeys = tabs.filter((t) => t.key !== '__none__').map((t) => t.key);
+                      const from = validKeys.indexOf(sourceKey);
+                      const to = validKeys.indexOf(tab.key);
+                      if (from !== -1 && to !== -1) {
+                        const next = [...validKeys];
+                        next.splice(from, 1);
+                        next.splice(to, 0, sourceKey);
+                        onReorderTabs?.(next);
+                      }
+                    },
+                    onDragEnd: () => {
+                      setDraggedKey(null);
+                      setDragOverKey(null);
+                    },
+                  }
+                : {})}
               style={({ pressed }) => [
                 styles.tab,
                 compact ? styles.tabCompact : styles.tabWide,
@@ -126,12 +181,27 @@ export function CategoryTabs({
                   minWidth: compact ? 104 : 150,
                   marginLeft: i === 0 ? 0 : -overlap,
                   paddingLeft: sidePad,
-                  // 오른쪽은 다음 탭에 덮이는 만큼 더 비워 글자가 가운데 보이게 한다.
                   paddingRight: sidePad + (i === tabs.length - 1 ? 0 : overlap),
-                  zIndex: active ? tabs.length + 1 : i + 1,
+                  zIndex: isDragOver ? tabs.length + 10 : active ? tabs.length + 1 : i + 1,
+                  cursor: (isDraggable ? (isDragging ? 'grabbing' : 'grab') : 'pointer') as any,
+                },
+                isDragging && { opacity: 0.45, transform: [{ scale: 0.95 }] },
+                isDragOver && {
+                  borderWidth: 2,
+                  borderColor: '#ffffff',
+                  borderStyle: 'dashed' as any,
+                  transform: [{ translateY: -4 }],
                 },
                 pressed && !active && styles.pressed,
               ]}>
+              {isDraggable && (
+                <MaterialCommunityIcons
+                  name="drag-vertical"
+                  size={compact ? 14 : 16}
+                  color={readableText(bg)}
+                  style={{ opacity: 0.45, marginRight: -4 }}
+                />
+              )}
               <Text
                 numberOfLines={1}
                 style={[styles.label, compact ? styles.labelCompact : styles.labelWide, { color: readableText(bg) }]}>
@@ -170,6 +240,9 @@ export function CategoryTabs({
             {subTabs.map((sub, i) => {
               const active = sub.key === activeSubKey;
               const bg = active ? sub.color : idle(sub.color);
+              const isDragging = draggedSubKey === sub.key;
+              const isDragOver = dragOverSubKey === sub.key;
+
               return (
                 <Pressable
                   key={sub.key}
@@ -177,6 +250,45 @@ export function CategoryTabs({
                   role="tab"
                   aria-selected={active}
                   aria-label={`하위 분류함 ${sub.label}`}
+                  {...(Platform.OS === 'web'
+                    ? {
+                        draggable: true,
+                        onDragStart: (e: any) => {
+                          e.dataTransfer.setData('text/plain', sub.key);
+                          e.dataTransfer.effectAllowed = 'move';
+                          setDraggedSubKey(sub.key);
+                        },
+                        onDragOver: (e: any) => {
+                          if (!draggedSubKey || draggedSubKey === sub.key) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          if (dragOverSubKey !== sub.key) setDragOverSubKey(sub.key);
+                        },
+                        onDragLeave: () => {
+                          if (dragOverSubKey === sub.key) setDragOverSubKey(null);
+                        },
+                        onDrop: (e: any) => {
+                          e.preventDefault();
+                          const sourceKey = e.dataTransfer.getData('text/plain') || draggedSubKey;
+                          setDraggedSubKey(null);
+                          setDragOverSubKey(null);
+                          if (!sourceKey || sourceKey === sub.key) return;
+                          const subKeys = subTabs.map((s) => s.key);
+                          const from = subKeys.indexOf(sourceKey);
+                          const to = subKeys.indexOf(sub.key);
+                          if (from !== -1 && to !== -1) {
+                            const next = [...subKeys];
+                            next.splice(from, 1);
+                            next.splice(to, 0, sourceKey);
+                            onReorderSubTabs?.(next);
+                          }
+                        },
+                        onDragEnd: () => {
+                          setDraggedSubKey(null);
+                          setDragOverSubKey(null);
+                        },
+                      }
+                    : {})}
                   style={({ pressed }) => [
                     styles.sub,
                     compact ? styles.subCompact : styles.subWide,
@@ -186,10 +298,24 @@ export function CategoryTabs({
                       backgroundColor: bg,
                       marginLeft: i === 0 ? 0 : -12,
                       paddingRight: (compact ? 14 : 20) + (i === subTabs.length - 1 ? 0 : 12),
-                      zIndex: active ? subTabs.length + 1 : i + 1,
+                      zIndex: isDragOver ? subTabs.length + 10 : active ? subTabs.length + 1 : i + 1,
+                      cursor: (isDragging ? 'grabbing' : 'grab') as any,
+                    },
+                    isDragging && { opacity: 0.45, transform: [{ scale: 0.95 }] },
+                    isDragOver && {
+                      borderWidth: 2,
+                      borderColor: '#ffffff',
+                      borderStyle: 'dashed' as any,
+                      transform: [{ translateY: 3 }],
                     },
                     pressed && !active && styles.pressed,
                   ]}>
+                  <MaterialCommunityIcons
+                    name="drag-vertical"
+                    size={compact ? 12 : 14}
+                    color={readableText(bg)}
+                    style={{ opacity: 0.45, marginRight: -2 }}
+                  />
                   <Text numberOfLines={1} style={[styles.subLabel, { color: readableText(bg) }]}>
                     {sub.label}
                   </Text>

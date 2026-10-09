@@ -213,6 +213,9 @@ export default function HomeScreenFeed() {
   // 내 보관함 화면 (null = 피드). 홈·Shorts·분류를 고르면 피드로 돌아간다.
   const [library, setLibrary] = useState<LibraryKind | null>(null);
 
+  // 피드 영상 정렬 기준 ('latest' = 최신순, 'title-asc' = 영상명 ㄱ~ㅎ, 'title-desc' = 영상명 ㅎ~ㄱ, 'channel-asc' = 채널명 ㄱ~ㅎ)
+  const [feedSortOrder, setFeedSortOrder] = useState<'latest' | 'title-asc' | 'title-desc' | 'channel-asc'>('latest');
+
   // 모바일 전용 사이드바 드로어 열림 상태
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState<boolean>(false);
 
@@ -444,6 +447,26 @@ export default function HomeScreenFeed() {
       return cat?.parentId === selectedCategory;
     });
   }, [channels, recentVideos, selectedCategory, categoryById, thumbQuality, refreshTick, hasRealChannels]);
+
+  // 피드 영상 정렬 적용
+  const sortedFeedVideos = useMemo(() => {
+    const list = [...feedVideos];
+    switch (feedSortOrder) {
+      case 'title-asc':
+        return list.sort((a, b) => a.title.localeCompare(b.title, 'ko', { sensitivity: 'base', numeric: true }));
+      case 'title-desc':
+        return list.sort((a, b) => b.title.localeCompare(a.title, 'ko', { sensitivity: 'base', numeric: true }));
+      case 'channel-asc':
+        return list.sort((a, b) => {
+          const comp = a.channelTitle.localeCompare(b.channelTitle, 'ko', { sensitivity: 'base', numeric: true });
+          if (comp !== 0) return comp;
+          return a.title.localeCompare(b.title, 'ko', { sensitivity: 'base', numeric: true });
+        });
+      case 'latest':
+      default:
+        return list;
+    }
+  }, [feedVideos, feedSortOrder]);
 
   // 쇼츠 목록
   const feedShorts = useMemo(() => {
@@ -806,6 +829,97 @@ export default function HomeScreenFeed() {
             </ScrollView>
           </View>
 
+          {/* 상단 피드 정렬 바 (최신순 / 제목순 / 채널명순) */}
+          {!library && !shortsOnly && (
+            <View style={[styles.feedSortBar, { backgroundColor: theme.background }]}>
+              <View style={styles.feedSortLabelWrap}>
+                <MaterialCommunityIcons name="sort" size={15} color={theme.textSecondary} />
+                <Text style={[styles.feedSortLabel, { color: theme.textSecondary }]}>영상 정렬:</Text>
+              </View>
+              <View style={styles.feedSortChips}>
+                <Pressable
+                  role="button"
+                  aria-label="최신순 정렬"
+                  onPress={() => setFeedSortOrder('latest')}
+                  style={({ pressed }) => [
+                    styles.feedSortChip,
+                    { borderColor: theme.backgroundSelected },
+                    feedSortOrder === 'latest' && {
+                      backgroundColor: theme.text,
+                      borderColor: theme.text,
+                    },
+                    pressed && { opacity: 0.8 },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.feedSortChipText,
+                      { color: theme.textSecondary },
+                      feedSortOrder === 'latest' && {
+                        color: theme.background,
+                        fontWeight: '700',
+                      },
+                    ]}>
+                    최신순
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  role="button"
+                  aria-label="영상 제목 가나다순 정렬"
+                  onPress={() =>
+                    setFeedSortOrder(feedSortOrder === 'title-asc' ? 'title-desc' : 'title-asc')
+                  }
+                  style={({ pressed }) => [
+                    styles.feedSortChip,
+                    { borderColor: theme.backgroundSelected },
+                    (feedSortOrder === 'title-asc' || feedSortOrder === 'title-desc') && {
+                      backgroundColor: theme.text,
+                      borderColor: theme.text,
+                    },
+                    pressed && { opacity: 0.8 },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.feedSortChipText,
+                      { color: theme.textSecondary },
+                      (feedSortOrder === 'title-asc' || feedSortOrder === 'title-desc') && {
+                        color: theme.background,
+                        fontWeight: '700',
+                      },
+                    ]}>
+                    {feedSortOrder === 'title-desc' ? '제목순 (ㅎ~ㄱ)' : '제목순 (ㄱ~ㅎ)'}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  role="button"
+                  aria-label="채널명 가나다순 정렬"
+                  onPress={() => setFeedSortOrder('channel-asc')}
+                  style={({ pressed }) => [
+                    styles.feedSortChip,
+                    { borderColor: theme.backgroundSelected },
+                    feedSortOrder === 'channel-asc' && {
+                      backgroundColor: theme.text,
+                      borderColor: theme.text,
+                    },
+                    pressed && { opacity: 0.8 },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.feedSortChipText,
+                      { color: theme.textSecondary },
+                      feedSortOrder === 'channel-asc' && {
+                        color: theme.background,
+                        fontWeight: '700',
+                      },
+                    ]}>
+                    채널명순
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
           {/* 메인 비디오 목록 스크롤뷰 */}
           {library ? (
             <LibraryView kind={library} />
@@ -822,7 +936,7 @@ export default function HomeScreenFeed() {
                   colors={['#ff0033']}
                 />
               }>
-              {!shortsOnly && hasRealChannels && feedVideos.length === 0 && (
+              {!shortsOnly && hasRealChannels && sortedFeedVideos.length === 0 && (
                 <View style={styles.feedEmpty}>
                   <Text style={[styles.feedEmptyTitle, { color: theme.text }]}>아직 이 기기에 최신 영상이 없어요</Text>
                   <Text style={[styles.feedEmptyBody, { color: theme.textSecondary }]}>
@@ -837,7 +951,7 @@ export default function HomeScreenFeed() {
               {/* 일반 영상 그리드 (상단 행) */}
               {!shortsOnly && (
                 <View style={[styles.videoGrid, isMobile && styles.videoGridMobile]}>
-                  {feedVideos.slice(0, 3).map((item) => (
+                  {sortedFeedVideos.slice(0, 3).map((item) => (
                     <VideoCard key={item.id} item={item} isMobile={isMobile} onMore={setSaveTarget} />
                   ))}
                 </View>
@@ -880,9 +994,9 @@ export default function HomeScreenFeed() {
               </View>
 
               {/* 일반 영상 그리드 (하단 행) */}
-              {!shortsOnly && feedVideos.length > 3 && (
+              {!shortsOnly && sortedFeedVideos.length > 3 && (
                 <View style={[styles.videoGrid, isMobile && styles.videoGridMobile, { marginTop: 24 }]}>
-                  {feedVideos.slice(3).map((item) => (
+                  {sortedFeedVideos.slice(3).map((item) => (
                     <VideoCard key={item.id} item={item} isMobile={isMobile} onMore={setSaveTarget} />
                   ))}
                 </View>
@@ -1460,5 +1574,39 @@ const styles = StyleSheet.create({
   drawerCloseButton: {
     padding: 6,
     borderRadius: 8,
+  },
+  feedSortBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128, 128, 128, 0.1)',
+  },
+  feedSortLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  feedSortLabel: {
+    fontSize: 12,
+  },
+  feedSortChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
+  feedSortChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    backgroundColor: 'transparent',
+  },
+  feedSortChipText: {
+    fontSize: 12,
   },
 });
