@@ -168,7 +168,12 @@ export function useNewVideoCheck() {
       }
       setState('idle');
     } catch (e) {
+      const partial = (e as { partial?: Record<string, Video[]> }).partial;
+      if (partial && Object.keys(partial).length > 0) saveRecentVideos(partial, Date.now());
+      setMessage(e instanceof Error ? e.message : String(e));
       if (e instanceof YouTubeAuthError) {
+        // 토큰이 거부됨 → 다시 연결하도록 토큰을 비운다.
+        useStore.getState().setToken('', 0);
         setState('needs-login');
       } else {
         setState('error');

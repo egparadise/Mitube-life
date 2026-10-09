@@ -156,7 +156,7 @@ export default function HomeScreen() {
     tabKeyOf,
     viewSince,
   );
-  const { state: checkState, progress, check } = useNewVideoCheck();
+  const { state: checkState, progress, message: checkMessage, check } = useNewVideoCheck();
 
   // ---------- 볼 시간 알림 ----------
   useAlertScheduleSync(); // 휴대폰: OS 예약을 설정과 맞춘다
@@ -323,6 +323,11 @@ export default function HomeScreen() {
             />
           )}
         </View>
+        {checkMessage && (pillState === 'error' || pillState === 'needs-login') ? (
+          <ThemedText type="small" style={styles.checkError}>
+            ⚠️ {checkMessage}
+          </ThemedText>
+        ) : null}
 
         {dueAlerts.map((d) => (
           <View
@@ -484,6 +489,7 @@ function EmptyState({ onImport }: { onImport: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  checkError: { color: '#d93025', paddingHorizontal: 16, paddingBottom: 6, textAlign: 'right' },
   container: { flex: 1, width: '100%', maxWidth: '100%', overflow: 'hidden' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   frame: {

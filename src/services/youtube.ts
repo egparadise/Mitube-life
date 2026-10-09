@@ -113,6 +113,7 @@ export async function fetchRecentVideos(
   let next = 0;
   let done = 0;
   let fatal: Error | null = null;
+  let lastSkipReason = '';
 
   async function fetchPlaylist(playlistId: string, max: number) {
     const params = new URLSearchParams({
@@ -136,6 +137,7 @@ export async function fetchRecentVideos(
         // keyInvalid · API_KEY_SERVICE_BLOCKED · 허용 웹사이트(referrer) 불일치 등 — 모든 채널이 같은 이유로 실패한다.
         throw new YouTubeKeyError(`YouTube API 키를 확인해 주세요: ${data.error?.message ?? res.status}`);
       }
+      lastSkipReason = `${res.status} ${reason ?? ''} ${data.error?.message ?? ''}`.trim();
       return null; // 이 채널만 건너뛴다
     }
     const videos: Video[] = [];
@@ -178,6 +180,7 @@ export async function fetchRecentVideos(
           fatal = e;
         }
         // 네트워크 오류 등 개별 실패는 건너뛴다.
+        lastSkipReason = e instanceof Error ? e.message : String(e);
       }
       done++;
       opts.onProgress?.(done, targets.length);
@@ -185,7 +188,14 @@ export async function fetchRecentVideos(
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, worker));
-  if (fatal) throw fatal;
+  if (fatal) {
+    // 도중에 멈춰도 그때까지 받은 채널은 쓰도록 함께 넘긴다.
+    (fatal as Error & { partial?: Record<string, Video[]> }).partial = out;
+    throw fatal;
+  }
+  if (targets.length > 0 && Object.keys(out).length === 0) {
+    throw new Error(`영상 정보를 하나도 받지 못했어요 (${lastSkipReason || '원인 불명'})`);
+  }
   return out;
 }
 
