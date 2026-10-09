@@ -9,6 +9,8 @@
  * - 이후 이 기기에서 바꾸면 1.5초 뒤 바뀐 행만 올린다.
  * 액세스 토큰·알림 발송 기록처럼 기기에만 의미 있는 값은 올리지 않는다.
  */
+import { AppState, Platform } from 'react-native';
+
 import { DefaultCategories } from '@/constants/categories';
 import { requireSupabase } from '@/services/supabase';
 import { useStore } from '@/store/store';
@@ -177,23 +179,24 @@ export async function initialSync(uid: string): Promise<void> {
   let categories: Category[];
   let channels: Channel[];
   let channelAlerts: Record<string, ChannelAlert>;
-  if (firstAdoption) {
-    // 가입 전 데이터 + 클라우드 (겹치면 클라우드 우선)
-    const unionBy = <T extends { id: string }>(a: T[], b: T[]) => {
-      const m = new Map(a.map((x) => [x.id, x]));
-      for (const x of b) m.set(x.id, x);
-      return [...m.values()];
-    };
-    categories = unionBy(local.categories, cloud.categories);
-    channels = unionBy(local.channels, cloud.channels);
-    channelAlerts = { ...local.channelAlerts, ...cloud.alerts };
+  if (firstAdoption && !cloudEmpty) {
+    // 이미 클라우드에 구성해 둔 계정 데이터가 있는 경우:
+    // 새 기기의 기본 샘플/임시 데이터를 섞지 않고, 클라우드의 구성을 온전히 그대로 가져온다.
+    categories = cloud.categories;
+    channels = cloud.channels;
+    channelAlerts = cloud.alerts;
+  } else if (firstAdoption && cloudEmpty) {
+    // 최초 가입 직후 첫 기기 동기화: 이 기기의 초기 데이터를 클라우드에 등록한다.
+    categories = local.categories;
+    channels = local.channels;
+    channelAlerts = local.channelAlerts;
   } else if (cloudEmpty && local.syncedUserId === uid) {
     // 같은 계정인데 클라우드가 비었다 → 이 기기 것을 다시 올린다.
     categories = local.categories;
     channels = local.channels;
     channelAlerts = local.channelAlerts;
   } else {
-    // 같은 계정(클라우드 기준) 또는 다른 계정(이전 계정 데이터는 섞지 않음)
+    // 이미 동기화된 기기 또는 재접속: 클라우드 기준으로 맞춤
     categories = cloudEmpty ? DefaultCategories : cloud.categories;
     channels = cloud.channels;
     channelAlerts = cloud.alerts;
@@ -282,9 +285,58 @@ export function startAutoSync(uid: string): () => void {
     }
   });
 
+  // 다른 기기(PC/스마트폰/태블릿)에서 수정한 내용을 즉시 반영하기 위한 포커스/활성화 감지
+  const onFocusOrActive = () => {
+    if (!running) {
+      initialSync(uid).catch(() => {});
+    }
+  };
+
+  let appStateSub: { remove: () => void } | null = null;
+  if (Platform.OS !== 'web') {
+    appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') onFocusOrActive();
+    });
+  } else if (typeof window !== 'undefined') {
+    window.addEventListener('focus', onFocusOrActive);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') onFocusOrActive();
+      });
+    }
+  }
+
+  // Supabase 실시간 변경 구독 (어느 기기에서든 수정 즉시 다른 기기에 실시간 반영)
+  let realtimeChannel: any = null;
+  try {
+    const sb = requireSupabase();
+    realtimeChannel = sb
+      .channel(`sync-realtime-${uid}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', filter: `user_id=eq.${uid}` },
+        () => {
+          if (!running) {
+            initialSync(uid).catch(() => {});
+          }
+        },
+      )
+      .subscribe();
+  } catch {}
+
   return () => {
     unsubscribe();
     if (timer) clearTimeout(timer);
+    appStateSub?.remove?.();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', onFocusOrActive);
+    }
+    if (realtimeChannel) {
+      try {
+        const sb = requireSupabase();
+        sb.removeChannel(realtimeChannel);
+      } catch {}
+    }
   };
 }
 
