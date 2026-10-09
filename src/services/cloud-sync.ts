@@ -65,8 +65,10 @@ const alertRow = (uid: string, channelId: string, a: ChannelAlert): Row => ({
   freq: a.freq,
   hour: a.hour,
   minute: a.minute,
-  weekday: a.weekday,
-  month_day: a.monthDay,
+  weekday: a.weekdays?.[0] ?? a.weekday,
+  month_day: a.monthDays?.[0] ?? a.monthDay,
+  weekdays: a.weekdays?.length ? a.weekdays : [a.weekday],
+  month_days: a.monthDays?.length ? a.monthDays : [a.monthDay],
 });
 const toAlert = (r: Row): ChannelAlert => ({
   freq: r.freq as ChannelAlert['freq'],
@@ -74,6 +76,8 @@ const toAlert = (r: Row): ChannelAlert => ({
   minute: Number(r.minute),
   weekday: Number(r.weekday ?? 1),
   monthDay: Number(r.month_day ?? 1),
+  weekdays: Array.isArray(r.weekdays) && r.weekdays.length ? (r.weekdays as number[]).map(Number) : undefined,
+  monthDays: Array.isArray(r.month_days) && r.month_days.length ? (r.month_days as number[]).map(Number) : undefined,
 });
 
 /** 지금 기기 상태를 테이블별 행(키 → 행)으로. */

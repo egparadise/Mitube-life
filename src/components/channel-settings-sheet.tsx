@@ -11,7 +11,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { ALERTS_RUN_IN_APP, ensureAlertPermission } from '@/services/alerts';
 import { useStore } from '@/store/store';
 import { AlertFreq, Category, Channel, ChannelAlert } from '@/types';
-import { describeAlert, formatClock, WEEKDAY_NAMES } from '@/utils/alert-time';
+import { alertMonthDays, alertWeekdays, describeAlert, formatClock, WEEKDAY_NAMES } from '@/utils/alert-time';
 import { mix, readableText } from '@/utils/color';
 
 type FreqChoice = 'off' | AlertFreq;
@@ -100,6 +100,24 @@ export function ChannelSettingsSheet({ channel, categories, onClose }: Props) {
     moveChannel(channel.id, id);
     setNote(`'${label}' 분류함으로 옮겼어요`);
   };
+
+  // 요일·날짜는 여러 개 고를 수 있다 (눌러서 켜고 끄기, 마지막 하나는 남긴다).
+  const days = alertWeekdays(draft);
+  const mdays = alertMonthDays(draft);
+  const toggleWeekday = (w: number) =>
+    setDraft((d) => {
+      const cur = alertWeekdays(d);
+      const next = cur.includes(w) ? cur.filter((x) => x !== w) : [...cur, w].sort((x, y) => x - y);
+      if (next.length === 0) return d;
+      return { ...d, weekdays: next, weekday: next[0] };
+    });
+  const toggleMonthDay = (md: number) =>
+    setDraft((d) => {
+      const cur = alertMonthDays(d);
+      const next = cur.includes(md) ? cur.filter((x) => x !== md) : [...cur, md].sort((x, y) => x - y);
+      if (next.length === 0) return d;
+      return { ...d, monthDays: next, monthDay: next[0] };
+    });
 
   const step = (field: 'hour' | 'minute', delta: number) =>
     setDraft((d) => {
@@ -259,11 +277,12 @@ export function ChannelSettingsSheet({ channel, categories, onClose }: Props) {
                 {WEEKDAY_NAMES.map((name, i) => (
                   <Pressable
                     key={name}
-                    onPress={() => setDraft((d) => ({ ...d, weekday: i + 1 }))}
-                    role="button"
+                    onPress={() => toggleWeekday(i + 1)}
+                    role="checkbox"
+                    aria-checked={days.includes(i + 1)}
                     aria-label={`${name}요일`}
-                    style={[styles.dayChip, chip(draft.weekday === i + 1)]}>
-                    <Text style={chipText(draft.weekday === i + 1)}>{name}</Text>
+                    style={[styles.dayChip, chip(days.includes(i + 1))]}>
+                    <Text style={chipText(days.includes(i + 1))}>{name}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -274,15 +293,16 @@ export function ChannelSettingsSheet({ channel, categories, onClose }: Props) {
                 label="날짜"
                 contentContainerStyle={styles.row}
                 // 저장된 날짜가 보이도록 (칩 약 42 + 간격 8)
-                initialCenterX={(draft.monthDay - 1) * 50 + 21}>
+                initialCenterX={(mdays[0] - 1) * 50 + 21}>
                 {MONTH_DAYS.map((day) => (
                   <Pressable
                     key={day}
-                    onPress={() => setDraft((d) => ({ ...d, monthDay: day }))}
-                    role="button"
+                    onPress={() => toggleMonthDay(day)}
+                    role="checkbox"
+                    aria-checked={mdays.includes(day)}
                     aria-label={`${day}일`}
-                    style={[styles.dayChip, chip(draft.monthDay === day)]}>
-                    <Text style={chipText(draft.monthDay === day)}>{day}</Text>
+                    style={[styles.dayChip, chip(mdays.includes(day))]}>
+                    <Text style={chipText(mdays.includes(day))}>{day}</Text>
                   </Pressable>
                 ))}
               </HScroller>

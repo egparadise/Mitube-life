@@ -28,10 +28,14 @@ export interface ChannelAlert {
   hour: number;
   /** 0-59 */
   minute: number;
-  /** 매주일 때 요일: 1=일 … 7=토 (expo-notifications 와 같은 규칙). */
+  /** 매주일 때 요일: 1=일 … 7=토 (expo-notifications 와 같은 규칙). weekdays 의 첫 값 (예전 버전 호환). */
   weekday: number;
+  /** 매주일 때 고른 요일들 (여러 개). 없으면 weekday 하나. */
+  weekdays?: number[];
   /** 매달일 때 날짜: 1-28 (모든 달에 있는 날짜만). */
   monthDay: number;
+  /** 매달일 때 고른 날짜들 (여러 개). 없으면 monthDay 하나. */
+  monthDays?: number[];
 }
 
 /** 기록 · 나중에 볼 동영상 · 재생목록에 담는 영상 하나. */

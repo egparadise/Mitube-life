@@ -172,6 +172,12 @@ export function parseBackup(text: string): Backup {
         minute,
         weekday: intIn(a.weekday, 1, 7) ?? 7,
         monthDay: intIn(a.monthDay, 1, 28) ?? 1,
+        weekdays: Array.isArray(a.weekdays)
+          ? a.weekdays.map((w) => intIn(w, 1, 7)).filter((w): w is number => w !== undefined)
+          : undefined,
+        monthDays: Array.isArray(a.monthDays)
+          ? a.monthDays.map((d) => intIn(d, 1, 28)).filter((d): d is number => d !== undefined)
+          : undefined,
       };
     }
   }

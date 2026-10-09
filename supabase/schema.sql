@@ -238,3 +238,7 @@ drop policy if exists "own recent videos" on public.recent_videos;
 create policy "own recent videos" on public.recent_videos
   for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- 7) 알림: 요일·날짜 여러 개 고르기 (weekday / month_day 는 첫 값, 예전 버전 호환)
+alter table public.channel_alerts add column if not exists weekdays smallint[];
+alter table public.channel_alerts add column if not exists month_days smallint[];

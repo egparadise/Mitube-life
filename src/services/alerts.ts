@@ -7,6 +7,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { ChannelAlert } from '@/types';
+import { alertMonthDays, alertWeekdays } from '@/utils/alert-time';
 
 export interface AlertEntry {
   channelId: string;
@@ -50,27 +51,28 @@ export async function ensureAlertPermission(): Promise<boolean> {
   return asked.granted;
 }
 
-function triggerFor(alert: ChannelAlert): Notifications.SchedulableNotificationTriggerInput {
+/** 알림 하나에 필요한 OS 예약들 (요일·날짜를 여러 개 고르면 하나씩). */
+function triggersFor(alert: ChannelAlert): Notifications.SchedulableNotificationTriggerInput[] {
   const { hour, minute } = alert;
   if (alert.freq === 'daily') {
-    return { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute, channelId: ANDROID_CHANNEL };
+    return [{ type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute, channelId: ANDROID_CHANNEL }];
   }
   if (alert.freq === 'weekly') {
-    return {
+    return alertWeekdays(alert).map((weekday) => ({
       type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-      weekday: alert.weekday, // 1=일 … 7=토
+      weekday, // 1=일 … 7=토
       hour,
       minute,
       channelId: ANDROID_CHANNEL,
-    };
+    }));
   }
-  return {
+  return alertMonthDays(alert).map((day) => ({
     type: Notifications.SchedulableTriggerInputTypes.MONTHLY,
-    day: alert.monthDay,
+    day,
     hour,
     minute,
     channelId: ANDROID_CHANNEL,
-  };
+  }));
 }
 
 /** 저장된 알림 설정과 OS 예약을 맞춘다: 이 앱이 만든 예약을 모두 지우고 다시 건다. */
@@ -86,15 +88,18 @@ export async function syncAlertSchedule(entries: AlertEntry[]): Promise<void> {
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return;
   for (const e of entries) {
-    await Notifications.scheduleNotificationAsync({
-      identifier: ID_PREFIX + e.channelId,
-      content: {
-        title: `📺 ${e.title}`,
-        body: '볼 시간이에요! 새 영상을 확인해 보세요.',
-        data: { channelId: e.channelId },
-      },
-      trigger: triggerFor(e.alert),
-    });
+    const triggers = triggersFor(e.alert);
+    for (let i = 0; i < triggers.length; i++) {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `${ID_PREFIX}${e.channelId}-${i}`,
+        content: {
+          title: `📺 ${e.title}`,
+          body: '볼 시간이에요! 새 영상을 확인해 보세요.',
+          data: { channelId: e.channelId },
+        },
+        trigger: triggers[i],
+      });
+    }
   }
 }
 
