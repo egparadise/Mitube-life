@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchSubscriptions } from '@/services/youtube';
-import { useStore } from '@/store/store';
+import { isValidYouTubeApiKey, useStore } from '@/store/store';
 
 // 구글 로그인 팝업 마무리(maybeCompleteAuthSession)는 모든 화면에서 실행되도록 auth-provider.tsx 에서 한다.
 
@@ -208,6 +208,12 @@ export function YouTubeConnectModal({ visible, onClose }: Props) {
             />
             <Pressable
               onPress={() => {
+                if (apiKey.trim() && !isValidYouTubeApiKey(apiKey)) {
+                  setApiKeyNote(
+                    'API 키 형식이 아니에요. API 키는 "AIza"로 시작해요 (…apps.googleusercontent.com 은 클라이언트 ID라 여기 넣으면 안 돼요).',
+                  );
+                  return;
+                }
                 setYoutubeApiKey(apiKey);
                 setApiKeyNote(apiKey.trim() ? '저장했어요. 구독 화면을 열면 최신 영상을 불러와요.' : 'API 키를 지웠어요.');
               }}

@@ -8,6 +8,12 @@ import { MockChannels } from '@/data/mockChannels';
 import { classifyChannels } from '@/services/classify';
 import { AdminSettings, Category, Channel, ChannelAlert, Playlist, SavedVideo, Video } from '@/types';
 
+/**
+ * YouTube Data API 키 형식 (구글 API 키는 'AIza' 로 시작하는 39자).
+ * OAuth 클라이언트 ID(…apps.googleusercontent.com)를 잘못 넣으면 모든 조회가 실패하므로 걸러 낸다.
+ */
+export const isValidYouTubeApiKey = (key: string | null | undefined) => /^AIza[0-9A-Za-z_-]{30,}$/.test((key ?? '').trim());
+
 export const DefaultAdminSettings: AdminSettings = {
   dailyLimitOn: false,
   dailyLimitMin: 60,
@@ -192,7 +198,7 @@ export const useStore = create<AppState>()(
       googleClientSecret: '',
       youtubeConnected: false,
       youtubeApiKey: '',
-      setYoutubeApiKey: (key) => set({ youtubeApiKey: key.trim() }),
+      setYoutubeApiKey: (key) => set({ youtubeApiKey: isValidYouTubeApiKey(key) ? key.trim() : '' }),
       setGoogleAuth: (clientId, clientSecret) =>
         set({ googleClientId: clientId.trim(), googleClientSecret: clientSecret.trim() }),
       importYouTubeChannels: (raw) => {
@@ -479,6 +485,8 @@ export const useStore = create<AppState>()(
         return {
           ...current,
           ...p,
+          // 형식이 틀린 API 키(예: 클라이언트 ID)는 버린다 — 남아 있으면 모든 영상 조회가 실패한다.
+          youtubeApiKey: isValidYouTubeApiKey(p.youtubeApiKey) ? p.youtubeApiKey!.trim() : '',
           adminSettings: {
             ...DefaultAdminSettings,
             ...p.adminSettings,

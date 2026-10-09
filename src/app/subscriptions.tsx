@@ -40,7 +40,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { initialSync } from '@/services/cloud-sync';
 import { channelUrl } from '@/services/youtube';
 import { canRequestYouTubeToken, loadGsi } from '@/services/google-gsi';
-import { useStore } from '@/store/store';
+import { isValidYouTubeApiKey, useStore } from '@/store/store';
 import { Channel, Video } from '@/types';
 import { shortAlert } from '@/utils/alert-time';
 
@@ -189,7 +189,7 @@ export default function HomeScreen() {
   const activeNew = activeChannels.reduce((sum, ch) => sum + (newByChannel.get(ch.id) ?? 0), 0);
   // 로그인이 없거나 만료됐으면 ⏰ 표시줄에 '눌러서 연결'을 띄운다.
   const pillState =
-    checkState === 'idle' && !youtubeApiKey && !isTokenUsable(accessToken, tokenExpiresAt) &&
+    checkState === 'idle' && !isValidYouTubeApiKey(youtubeApiKey) && !isTokenUsable(accessToken, tokenExpiresAt) &&
     channels.some((c) => isRealChannelId(c.id))
       ? 'needs-login'
       : checkState;

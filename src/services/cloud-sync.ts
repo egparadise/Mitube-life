@@ -13,7 +13,7 @@ import { AppState, Platform } from 'react-native';
 
 import { DefaultCategories } from '@/constants/categories';
 import { requireSupabase } from '@/services/supabase';
-import { useStore } from '@/store/store';
+import { isValidYouTubeApiKey, useStore } from '@/store/store';
 import { Category, Channel, ChannelAlert } from '@/types';
 
 type Row = Record<string, unknown>;
@@ -214,8 +214,8 @@ export async function initialSync(uid: string): Promise<void> {
     baselineAt: (cloudSettings.baseline_at as number | null) ?? (sameOrFirst ? local.baselineAt : null),
     lastCheckedAt: (cloudSettings.last_checked_at as number | null) ?? (sameOrFirst ? local.lastCheckedAt : null),
   });
-  if (prefs.youtubeApiKey && !useStore.getState().youtubeApiKey) {
-    useStore.getState().setYoutubeApiKey(prefs.youtubeApiKey);
+  if (isValidYouTubeApiKey(prefs.youtubeApiKey) && !useStore.getState().youtubeApiKey) {
+    useStore.getState().setYoutubeApiKey(prefs.youtubeApiKey!);
   }
   if (!sameOrFirst) {
     // 다른 계정의 기기 전용 기록(최신 영상·알림 발송 기록)은 지운다.

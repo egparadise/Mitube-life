@@ -3,7 +3,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { getSampleVideosForChannel } from '@/data/sampleVideos';
 import { canRequestYouTubeToken, requestYouTubeAccessToken } from '@/services/google-gsi';
 import { fetchRecentVideos, YouTubeAuthError, YouTubeReadAuth } from '@/services/youtube';
-import { useStore } from '@/store/store';
+import { isValidYouTubeApiKey, useStore } from '@/store/store';
 import { Channel, Video } from '@/types';
 
 /** 토큰이 이 시간 안에 만료되면 이미 만료된 것으로 본다. */
@@ -16,7 +16,7 @@ export function isTokenUsable(token: string | null, expiresAt: number | null): b
 /** 최신 영상을 읽을 수단: API 키가 있으면 키(만료 없음), 없으면 아직 살아 있는 로그인 토큰. */
 export function readAuthFromStore(): YouTubeReadAuth | null {
   const { youtubeApiKey, accessToken, tokenExpiresAt } = useStore.getState();
-  if (youtubeApiKey) return { apiKey: youtubeApiKey };
+  if (isValidYouTubeApiKey(youtubeApiKey)) return { apiKey: youtubeApiKey };
   if (isTokenUsable(accessToken, tokenExpiresAt)) return { accessToken: accessToken! };
   return null;
 }
