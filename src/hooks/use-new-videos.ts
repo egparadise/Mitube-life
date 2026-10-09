@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { getSampleVideosForChannel } from '@/data/sampleVideos';
+import { canRequestYouTubeToken, requestYouTubeAccessToken } from '@/services/google-gsi';
 import { fetchRecentVideos, YouTubeAuthError, YouTubeReadAuth } from '@/services/youtube';
 import { useStore } from '@/store/store';
 import { Channel, Video } from '@/types';
@@ -82,17 +83,67 @@ export function useNewVideoCounts(
 
 export type CheckState = 'idle' | 'checking' | 'needs-login' | 'error';
 
-/** 구독 채널들의 최신 영상을 가져와 저장한다. 토큰이 없거나 만료되면 'needs-login'. */
+/** 실제 YouTube 채널 id (데모 채널이 아님). */
+export const isRealChannelId = (id: string) => /^UC[\w-]{10,}$/.test(id);
+
+/** 예전 버전이 실제 채널에 넣어 둔 샘플(가짜) 영상을 지운다. */
+function purgeSampleVideos() {
+  const { recentVideos } = useStore.getState();
+  let changed = false;
+  const next: Record<string, Video[]> = {};
+  for (const [id, list] of Object.entries(recentVideos)) {
+    const kept = isRealChannelId(id) ? list.filter((v) => !v.id.startsWith('sample-')) : list;
+    if (kept.length !== list.length) changed = true;
+    next[id] = kept;
+  }
+  if (changed) useStore.setState({ recentVideos: next });
+}
+
+/** 이 기기에 실제 채널의 최신 영상 기록이 하나도 없는지 (다른 기기에서 처음 열었을 때). */
+export function hasNoLocalVideos(): boolean {
+  const { channels, recentVideos } = useStore.getState();
+  return channels.some((c) => isRealChannelId(c.id)) &&
+    !channels.some((c) => isRealChannelId(c.id) && (recentVideos[c.id]?.length ?? 0) > 0);
+}
+
+/**
+ * 구독 채널들의 최신 영상을 가져와 저장한다.
+ * - 읽을 수단(API 키·살아 있는 토큰)이 없으면: interactive 일 때(사용자가 누름) 웹에서는 구글 창으로
+ *   YouTube 읽기 권한을 받아 이어서 확인하고, 아니면 'needs-login'.
+ * - 실제 채널에는 샘플 영상을 넣지 않는다 (데모 채널만 샘플로 채움).
+ */
 export function useNewVideoCheck() {
   const [state, setState] = useState<CheckState>('idle');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [message, setMessage] = useState('');
   const running = useRef(false);
 
-  const check = useCallback(async () => {
+  const check = useCallback(async (opts: { interactive?: boolean } = {}) => {
     if (running.current) return;
+    purgeSampleVideos();
     const { channels, saveRecentVideos, recentVideos: existingVideos } = useStore.getState();
-    const auth = readAuthFromStore();
+    let auth = readAuthFromStore();
+    const hasReal = channels.some((c) => isRealChannelId(c.id));
+
+    if (!auth && hasReal) {
+      if (!opts.interactive || !canRequestYouTubeToken()) {
+        setState('needs-login');
+        return;
+      }
+      try {
+        running.current = true;
+        setState('checking');
+        const { token, expiresAt } = await requestYouTubeAccessToken();
+        useStore.getState().setToken(token, expiresAt);
+        auth = { accessToken: token };
+      } catch (e) {
+        setState('needs-login');
+        setMessage(e instanceof Error ? e.message : String(e));
+        return;
+      } finally {
+        running.current = false;
+      }
+    }
 
     running.current = true;
     setState('checking');
@@ -108,12 +159,10 @@ export function useNewVideoCheck() {
         });
         saveRecentVideos(videos, Date.now());
       } else {
-        // YouTube API 로그인 전이라도 샘플 데이터로 최신 영상 확인 및 알람 배지 계산
-        const videos: Record<string, Video[]> = { ...existingVideos };
+        // 데모 채널만 있을 때: 샘플 영상으로 화면을 채운다 (실제 채널은 위에서 걸러짐).
+        const videos: Record<string, Video[]> = {};
         for (const ch of channels) {
-          if (!videos[ch.id] || videos[ch.id].length === 0) {
-            videos[ch.id] = getSampleVideosForChannel(ch.id);
-          }
+          if (!existingVideos[ch.id]?.length) videos[ch.id] = getSampleVideosForChannel(ch.id, ch.title);
         }
         saveRecentVideos(videos, Date.now());
       }

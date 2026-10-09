@@ -26,6 +26,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import {
+  hasNoLocalVideos,
+  isRealChannelId,
   isTokenUsable,
   readAuthFromStore,
   shownSinceFor,
@@ -37,6 +39,7 @@ import { useAlertScheduleSync, useInAppAlerts } from '@/hooks/use-alerts';
 import { useTheme } from '@/hooks/use-theme';
 import { initialSync } from '@/services/cloud-sync';
 import { channelUrl } from '@/services/youtube';
+import { canRequestYouTubeToken, loadGsi } from '@/services/google-gsi';
 import { useStore } from '@/store/store';
 import { Channel, Video } from '@/types';
 import { shortAlert } from '@/utils/alert-time';
@@ -160,13 +163,20 @@ export default function HomeScreen() {
   const { due: dueAlerts, dismiss: dismissAlert } = useInAppAlerts(); // 웹: 화면이 열려 있을 때 알린다
 
   const hasChannels = channels.length > 0;
+  // 구글 창이 팝업 차단에 걸리지 않도록 스크립트를 미리 불러 둔다 (웹).
+  useEffect(() => {
+    if (canRequestYouTubeToken()) loadGsi().catch(() => {});
+  }, []);
   useEffect(() => {
     // 처음 열 때와 새로 로그인했을 때, 마지막 확인이 30분 넘게 지났으면 자동으로 확인한다.
     if (!hydrated || !hasChannels) return;
+    // 읽을 수단이 없으면 자동으로는 확인하지 않는다 (구글 창은 사용자가 ⏰ 를 눌렀을 때만).
+    if (!readAuthFromStore() && !hasNoLocalVideos()) return;
     const s = useStore.getState();
-    if (s.lastCheckedAt && Date.now() - s.lastCheckedAt < AUTO_CHECK_MS) return;
+    // 다른 기기에서 확인한 시각이 동기화돼 와도, 이 기기에 영상 기록이 없으면 확인한다.
+    if (s.lastCheckedAt && Date.now() - s.lastCheckedAt < AUTO_CHECK_MS && !hasNoLocalVideos()) return;
     check();
-  }, [hydrated, hasChannels, check]);
+  }, [hydrated, hasChannels, accessToken, youtubeApiKey, check]);
 
   const pillItems: PillItem[] = tabs
     .filter((t) => (newByTab.get(t.key) ?? 0) > 0)
@@ -177,10 +187,22 @@ export default function HomeScreen() {
       count: newByTab.get(t.key) ?? 0,
     }));
   const activeNew = activeChannels.reduce((sum, ch) => sum + (newByChannel.get(ch.id) ?? 0), 0);
-  const pillState = checkState;
+  // 로그인이 없거나 만료됐으면 ⏰ 표시줄에 '눌러서 연결'을 띄운다.
+  const pillState =
+    checkState === 'idle' && !youtubeApiKey && !isTokenUsable(accessToken, tokenExpiresAt) &&
+    channels.some((c) => isRealChannelId(c.id))
+      ? 'needs-login'
+      : checkState;
 
   const onAlarm = () => {
-    check();
+    if (!readAuthFromStore() && !canRequestYouTubeToken()) {
+      // 휴대폰 앱: 설정의 유튜브 연결 창을 연다.
+      setConnectRequested(true);
+      router.push('/explore');
+      return;
+    }
+    // 웹: 필요하면 구글 창으로 YouTube 읽기 권한을 받고 바로 최신 영상을 가져온다.
+    check({ interactive: true });
   };
 
   const [refreshing, setRefreshing] = useState(false);

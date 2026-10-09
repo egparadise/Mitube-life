@@ -33,7 +33,7 @@ export function NewVideoPill({ items, state, progress, checkedOnce, onAlarm, onS
 
   let hint = '';
   if (state === 'checking') hint = progress ? `확인 중 ${progress.done}/${progress.total}` : '확인 중…';
-  else if (state === 'needs-login') hint = '눌러서 로그인';
+  else if (state === 'needs-login') hint = '눌러서 YouTube 연결';
   else if (state === 'error') hint = '확인 실패';
   else if (items.length === 0) hint = checkedOnce ? '새 영상 없음' : '눌러서 확인';
 

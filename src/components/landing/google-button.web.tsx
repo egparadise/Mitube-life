@@ -11,37 +11,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import { RedirectGoogleButton } from '@/components/landing/google-redirect-button';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { authErrorMessage } from '@/services/auth';
+import { GOOGLE_WEB_CLIENT_ID, loadGsi } from '@/services/google-gsi';
 import { supabase } from '@/services/supabase';
 
-const CLIENT_ID = (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '').trim();
-const GSI_SRC = 'https://accounts.google.com/gsi/client';
-
-interface GsiApi {
-  accounts: {
-    id: {
-      initialize: (cfg: Record<string, unknown>) => void;
-      renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void;
-    };
-  };
-}
-
-let gsiLoading: Promise<GsiApi> | null = null;
-function loadGsi(): Promise<GsiApi> {
-  const w = window as unknown as { google?: GsiApi };
-  if (w.google?.accounts?.id) return Promise.resolve(w.google);
-  gsiLoading ??= new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = GSI_SRC;
-    s.async = true;
-    s.onload = () => (w.google ? resolve(w.google) : reject(new Error('구글 로그인을 불러오지 못했어요.')));
-    s.onerror = () => {
-      gsiLoading = null;
-      reject(new Error('구글 로그인을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
-    };
-    document.head.appendChild(s);
-  });
-  return gsiLoading;
-}
+const CLIENT_ID = GOOGLE_WEB_CLIENT_ID;
 
 /** 원래 nonce → SHA-256 hex (구글에는 해시를, Supabase 에는 원래 값을 준다). */
 async function sha256Hex(text: string): Promise<string> {
