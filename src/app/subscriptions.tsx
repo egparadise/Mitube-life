@@ -28,6 +28,7 @@ import { Spacing } from '@/constants/theme';
 import {
   hasNoLocalVideos,
   isRealChannelId,
+  purgeSampleVideos,
   isTokenUsable,
   readAuthFromStore,
   shownSinceFor,
@@ -163,9 +164,10 @@ export default function HomeScreen() {
   const { due: dueAlerts, dismiss: dismissAlert } = useInAppAlerts(); // 웹: 화면이 열려 있을 때 알린다
 
   const hasChannels = channels.length > 0;
-  // 구글 창이 팝업 차단에 걸리지 않도록 스크립트를 미리 불러 둔다 (웹).
+  // 구글 창이 팝업 차단에 걸리지 않도록 스크립트를 미리 불러 둔다 (웹). 예전에 들어간 가짜 샘플 영상도 정리.
   useEffect(() => {
     if (canRequestYouTubeToken()) loadGsi().catch(() => {});
+    purgeSampleVideos();
   }, []);
   useEffect(() => {
     // 처음 열 때와 새로 로그인했을 때, 마지막 확인이 30분 넘게 지났으면 자동으로 확인한다.
@@ -327,6 +329,10 @@ export default function HomeScreen() {
           <ThemedText type="small" style={styles.checkError}>
             ⚠️ {checkMessage}
           </ThemedText>
+        ) : pillState === 'needs-login' && hasChannels ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.checkHint}>
+            ⏰ 를 눌러 YouTube에 연결하면 채널별 최신 영상 썸네일이 나와요 (이 기기에서 한 번, 약 1시간 유지).
+          </ThemedText>
         ) : null}
 
         {dueAlerts.map((d) => (
@@ -427,7 +433,12 @@ export default function HomeScreen() {
                         channelAlerts[item.id] ? shortAlert(channelAlerts[item.id]) : undefined
                       }
                       newCount={newByChannel.get(item.id) ?? 0}
-                      videos={recentVideos[item.id] ?? getSampleVideosForChannel(item.id, item.title)}
+                      // 실제 채널은 실제 영상만 (없으면 비움). 샘플은 데모 채널에만.
+                      videos={
+                        isRealChannelId(item.id)
+                          ? (recentVideos[item.id] ?? []).filter((v) => !v.id.startsWith('sample-'))
+                          : (recentVideos[item.id] ?? getSampleVideosForChannel(item.id, item.title))
+                      }
                       newSince={activeNewSince}
                       compact={compact}
                     />
@@ -489,6 +500,7 @@ function EmptyState({ onImport }: { onImport: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  checkHint: { paddingHorizontal: 16, paddingBottom: 6 },
   checkError: { color: '#d93025', paddingHorizontal: 16, paddingBottom: 6, textAlign: 'right' },
   container: { flex: 1, width: '100%', maxWidth: '100%', overflow: 'hidden' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },

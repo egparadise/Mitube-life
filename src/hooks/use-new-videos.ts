@@ -87,7 +87,7 @@ export type CheckState = 'idle' | 'checking' | 'needs-login' | 'error';
 export const isRealChannelId = (id: string) => /^UC[\w-]{10,}$/.test(id);
 
 /** 예전 버전이 실제 채널에 넣어 둔 샘플(가짜) 영상을 지운다. */
-function purgeSampleVideos() {
+export function purgeSampleVideos() {
   const { recentVideos } = useStore.getState();
   let changed = false;
   const next: Record<string, Video[]> = {};
