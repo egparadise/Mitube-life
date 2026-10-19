@@ -29,7 +29,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { shortsLimitReached } from '@/hooks/use-usage-tracker';
 import { syncNow } from '@/services/cloud-sync';
 import { timeAgo } from '@/utils/format';
-import { channelUrl, fetchRecentVideos } from '@/services/youtube';
+import { byNewest, channelUrl, fetchRecentVideos } from '@/services/youtube';
 import { useStore } from '@/store/store';
 import { Category, Channel, Video } from '@/types';
 
@@ -247,7 +247,8 @@ export default function HomeScreenFeed() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [refreshTick, setRefreshTick] = useState<number>(0);
 
-  const triggerRefresh = useCallback(async () => {
+  // force: 아래로 당겨 새로고침·홈 버튼 — 5분만 지나도 YouTube 에서 새로 받는다 (탭 이동은 30분).
+  const triggerRefresh = useCallback(async (force = false) => {
     setRefreshing(true);
     try {
       // 1. 로그인 상태이면 클라우드 최신 카테고리/채널 구성 동기화
@@ -262,7 +263,8 @@ export default function HomeScreenFeed() {
       //    (예전에는 탭을 누를 때마다 360개 채널을 다시 받아 하루 YouTube 사용량을 빠르게 소진했다)
       const auth = readAuthFromStore();
       const last = useStore.getState().lastCheckedAt;
-      if (auth && (!last || Date.now() - last > 30 * 60 * 1000)) {
+      const minGap = (force ? 5 : 30) * 60 * 1000;
+      if (auth && (!last || Date.now() - last > minGap)) {
         const { channels, saveRecentVideos } = useStore.getState();
         const videos = await fetchRecentVideos(auth, channels.map((c) => c.id));
         saveRecentVideos(videos, Date.now());
@@ -280,7 +282,8 @@ export default function HomeScreenFeed() {
     setSelectedCategory('all');
     setShortsOnly(false);
     setMobileDrawerOpen(false);
-    triggerRefresh();
+    setFeedSortOrder('latest');
+    triggerRefresh(true);
     feedScrollRef.current?.scrollTo?.({ y: 0, animated: true });
   }, [triggerRefresh]);
 
@@ -441,7 +444,7 @@ export default function HomeScreenFeed() {
       }
     }
     // 최신순
-    dated.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
+    dated.sort(byNewest);
     list.push(...dated);
 
     // 데모 영상은 실제 구독 채널이 하나도 없을 때(둘러보기)만 보여 준다.
@@ -469,9 +472,7 @@ export default function HomeScreenFeed() {
       case 'live':
         return list.sort((a, b) => {
           if (a.isLive !== b.isLive) return a.isLive ? -1 : 1;
-          const aTime = a.publishedAt ?? '';
-          const bTime = b.publishedAt ?? '';
-          return bTime.localeCompare(aTime);
+          return byNewest(a, b);
         });
       case 'title-asc':
         return list.sort((a, b) => a.title.localeCompare(b.title, 'ko', { sensitivity: 'base', numeric: true }));
@@ -485,7 +486,7 @@ export default function HomeScreenFeed() {
         });
       case 'latest':
       default:
-        return list;
+        return list.sort(byNewest);
     }
   }, [feedVideos, feedSortOrder]);
 
@@ -511,7 +512,7 @@ export default function HomeScreenFeed() {
         });
       }
     }
-    real.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
+    real.sort(byNewest);
     const source: FeedVideoItem[] = real.length > 0 || hasRealChannels ? real.slice(0, 40) : SAMPLE_SHORTS;
     if (selectedCategory === 'all') return source;
     return source.filter((s) => {
@@ -1012,7 +1013,7 @@ export default function HomeScreenFeed() {
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
-                  onRefresh={triggerRefresh}
+                  onRefresh={() => triggerRefresh(true)}
                   tintColor="#ff0033"
                   colors={['#ff0033']}
                 />

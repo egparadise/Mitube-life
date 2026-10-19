@@ -91,6 +91,20 @@ interface PlaylistItemsPage {
   error?: { message?: string; errors?: { reason?: string }[] };
 }
 
+/** 두 ISO 시각 중 더 늦은 것 (없으면 있는 쪽). */
+function laterIso(a?: string, b?: string): string | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return Date.parse(b) > Date.parse(a) ? b : a;
+}
+
+/** 최신순 비교 — 문자열이 아니라 실제 시각으로 비교한다 (형식이 달라도 순서가 맞게). */
+export function byNewest(a: { publishedAt?: string }, b: { publishedAt?: string }): number {
+  const ta = Date.parse(a.publishedAt ?? '') || 0;
+  const tb = Date.parse(b.publishedAt ?? '') || 0;
+  return tb - ta;
+}
+
 /** 비공개·삭제된 영상은 업로드 목록에 이런 제목으로 남는다. */
 const HIDDEN_TITLES = new Set(['Private video', 'Deleted video']);
 
@@ -144,8 +158,10 @@ export async function fetchRecentVideos(
     for (const it of data.items ?? []) {
       const s = it.snippet ?? {};
       const id = it.contentDetails?.videoId ?? s.resourceId?.videoId;
-      // 예약 공개(프리미어)는 videoPublishedAt 이 없으니 목록에 올라간 시각으로 대신한다.
-      const publishedAt = it.contentDetails?.videoPublishedAt ?? s.publishedAt;
+      // 게시 시각 = '원래 게시 시각'과 '업로드 목록에 올라간 시각' 중 더 늦은 쪽.
+      // 비공개로 올렸다가 나중에 공개한 영상·예약 공개·프리미어·라이브 다시보기는 원래 시각이 며칠 전으로 찍혀
+      // 최신순에서 아래로 밀려났다. YouTube 구독 피드처럼 '새로 올라온 순서'로 맞춘다.
+      const publishedAt = laterIso(it.contentDetails?.videoPublishedAt, s.publishedAt);
       if (!id || !publishedAt || HIDDEN_TITLES.has(s.title ?? '')) continue;
       videos.push({
         id,
@@ -167,7 +183,7 @@ export async function fetchRecentVideos(
     });
     const merged = new Map(videos.map((v) => [v.id, v]));
     for (const sv of shorts ?? []) merged.set(sv.id, { ...sv, ...merged.get(sv.id), isShort: true });
-    out[channelId] = [...merged.values()].sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
+    out[channelId] = [...merged.values()].sort(byNewest);
   }
 
   async function worker() {
