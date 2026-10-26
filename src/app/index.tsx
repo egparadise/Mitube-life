@@ -24,10 +24,11 @@ import { LibraryKind, LibraryView, openVideo, SaveVideoMenu } from '@/components
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { readAuthFromStore } from '@/hooks/use-new-videos';
+import { readAuthFromStore, useNewVideoCheck } from '@/hooks/use-new-videos';
 import { useTheme } from '@/hooks/use-theme';
 import { shortsLimitReached } from '@/hooks/use-usage-tracker';
 import { syncNow } from '@/services/cloud-sync';
+import { canRequestYouTubeToken, loadGsi } from '@/services/google-gsi';
 import { timeAgo } from '@/utils/format';
 import { byNewest, channelUrl, fetchRecentVideos } from '@/services/youtube';
 import { useStore } from '@/store/store';
@@ -244,6 +245,15 @@ export default function HomeScreenFeed() {
   const [saveTarget, setSaveTarget] = useState<FeedVideoItem | null>(null);
 
   const feedScrollRef = useRef<ScrollView>(null);
+
+  // 최신 영상을 언제 받았는지 + 지금 확인 (YouTube 연결이 끊겼으면 연결 창을 띄운다 — 버튼 누름에서 바로 호출)
+  const lastCheckedAt = useStore((s) => s.lastCheckedAt);
+  const newCheck = useNewVideoCheck();
+  const checkStale = !lastCheckedAt || Date.now() - lastCheckedAt > 60 * 60 * 1000;
+  useEffect(() => {
+    // '지금 확인'을 눌렀을 때 YouTube 연결 창이 바로 뜨도록 미리 불러 둔다.
+    if (canRequestYouTubeToken()) loadGsi().catch(() => {});
+  }, []);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [refreshTick, setRefreshTick] = useState<number>(0);
 
@@ -425,7 +435,7 @@ export default function HomeScreenFeed() {
       if (vids && vids.length > 0) {
         for (const v of vids) {
           if (v.isShort || v.id.startsWith('sample-')) continue;
-          const isLive = v.isLive || v.title.includes('[LIVE]') || v.title.includes('라이브') || (ch.isLive ?? false);
+          const isLive = v.isLive ?? false;
           dated.push({
             id: v.id,
             title: v.title,
@@ -486,7 +496,8 @@ export default function HomeScreenFeed() {
         });
       case 'latest':
       default:
-        return list.sort(byNewest);
+        // YouTube 구독 피드처럼 지금 방송 중인 라이브를 맨 앞에, 나머지는 새로 올라온 순서.
+        return list.sort((a, b) => (a.isLive !== b.isLive ? (a.isLive ? -1 : 1) : byNewest(a, b)));
     }
   }, [feedVideos, feedSortOrder]);
 
@@ -1002,6 +1013,32 @@ export default function HomeScreenFeed() {
             </View>
           )}
 
+          {/* 최신 영상 기준 시각 + 지금 확인 */}
+          {!library && hasRealChannels && (checkStale || newCheck.state !== 'idle' || !!newCheck.message) && (
+            <View style={[styles.freshBar, { backgroundColor: theme.backgroundElement }]}>
+              <Text style={[styles.freshText, { color: theme.text }]} numberOfLines={2}>
+                {newCheck.state === 'checking'
+                  ? `최신 영상 확인 중… ${newCheck.progress ? `${newCheck.progress.done}/${newCheck.progress.total}` : ''}`
+                  : newCheck.message
+                    ? newCheck.message
+                    : lastCheckedAt
+                      ? `최신 영상을 ${timeAgo(new Date(lastCheckedAt).toISOString())} 확인했어요. 새 영상·라이브를 보려면 다시 확인하세요.`
+                      : '아직 최신 영상을 확인하지 않았어요.'}
+              </Text>
+              {newCheck.state !== 'checking' && (
+                <Pressable
+                  onPress={() => newCheck.check({ interactive: true })}
+                  role="button"
+                  aria-label="최신 영상 지금 확인"
+                  style={({ pressed }) => [styles.freshBtn, pressed && { opacity: 0.7 }]}>
+                  <Text style={styles.freshBtnText}>
+                    {newCheck.state === 'needs-login' ? 'YouTube 연결' : '지금 확인'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
           {/* 메인 비디오 목록 스크롤뷰 */}
           {library ? (
             <LibraryView kind={library} />
@@ -1274,6 +1311,19 @@ function ShortsCard({
 }
 
 const styles = StyleSheet.create({
+  freshBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  freshText: { flex: 1, fontSize: 13 },
+  freshBtn: { backgroundColor: '#ff0033', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 6 },
+  freshBtnText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
   feedEmpty: { padding: 24, gap: 10, alignItems: 'flex-start' },
   feedEmptyTitle: { fontSize: 17, fontWeight: '800' },
   feedEmptyBody: { fontSize: 14, lineHeight: 21 },

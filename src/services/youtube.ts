@@ -186,6 +186,50 @@ export async function fetchRecentVideos(
     out[channelId] = [...merged.values()].sort(byNewest);
   }
 
+  /**
+   * 지금 라이브 중인 영상을 표시한다 (videos.list 50개당 1 할당량).
+   * 라이브 중이면 isLive, 게시 시각은 방송 시작 시각. 아직 시작 안 한 예약 방송은 목록에서 뺀다.
+   */
+  async function markLive(result: Record<string, Video[]>) {
+    const ids = Object.values(result).flatMap((l) => l.filter((v) => !v.isShort).map((v) => v.id));
+    const info = new Map<string, { live: string; start?: string }>();
+    for (let i = 0; i < ids.length; i += 50) {
+      const params = new URLSearchParams({ part: 'snippet,liveStreamingDetails', id: ids.slice(i, i + 50).join(',') });
+      if ('apiKey' in auth) params.set('key', auth.apiKey);
+      try {
+        const res = await fetch(`${API}/videos?${params.toString()}`, {
+          headers: 'accessToken' in auth ? { Authorization: `Bearer ${auth.accessToken}` } : {},
+        });
+        if (!res.ok) return; // 라이브 표시는 덤 — 실패해도 영상 목록은 그대로 쓴다.
+        const data = (await res.json()) as {
+          items?: {
+            id: string;
+            snippet?: { liveBroadcastContent?: string };
+            liveStreamingDetails?: { actualStartTime?: string };
+          }[];
+        };
+        for (const it of data.items ?? []) {
+          info.set(it.id, {
+            live: it.snippet?.liveBroadcastContent ?? 'none',
+            start: it.liveStreamingDetails?.actualStartTime,
+          });
+        }
+      } catch {
+        return;
+      }
+    }
+    for (const [ch, list] of Object.entries(result)) {
+      result[ch] = list
+        .filter((v) => info.get(v.id)?.live !== 'upcoming')
+        .map((v) => {
+          const x = info.get(v.id);
+          if (x?.live !== 'live') return v.isLive ? { ...v, isLive: false } : v;
+          return { ...v, isLive: true, publishedAt: x.start ?? v.publishedAt };
+        })
+        .sort(byNewest);
+    }
+  }
+
   async function worker() {
     while (!fatal && next < targets.length) {
       const id = targets[next++];
@@ -204,6 +248,7 @@ export async function fetchRecentVideos(
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, targets.length) }, worker));
+  if (!fatal) await markLive(out);
   if (fatal) {
     // 도중에 멈춰도 그때까지 받은 채널은 쓰도록 함께 넘긴다.
     (fatal as Error & { partial?: Record<string, Video[]> }).partial = out;
