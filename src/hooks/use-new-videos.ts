@@ -168,6 +168,8 @@ export function useNewVideoCheck() {
           onProgress: (done, total) => {
             if (done % 10 === 0 || done === total) setProgress({ done, total });
           },
+          // 받는 대로 화면에 반영한다 (360개를 다 받을 때까지 옛 영상만 보이지 않게).
+          onPartial: (partial) => saveRecentVideos(partial, Date.now()),
         });
         saveRecentVideos(videos, Date.now());
       } else {

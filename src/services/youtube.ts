@@ -117,7 +117,13 @@ const HIDDEN_TITLES = new Set(['Private video', 'Deleted video']);
 export async function fetchRecentVideos(
   auth: YouTubeReadAuth,
   channelIds: string[],
-  opts: { perChannel?: number; concurrency?: number; onProgress?: (done: number, total: number) => void } = {},
+  opts: {
+    perChannel?: number;
+    concurrency?: number;
+    onProgress?: (done: number, total: number) => void;
+    /** 중간 결과 (채널 40개마다) — 다 끝날 때까지 기다리지 않고 화면에 바로 반영하려고. */
+    onPartial?: (partial: Record<string, Video[]>) => void;
+  } = {},
 ): Promise<Record<string, Video[]>> {
   const perChannel = opts.perChannel ?? 6;
   const shortsPerChannel = 3;
@@ -244,6 +250,7 @@ export async function fetchRecentVideos(
       }
       done++;
       opts.onProgress?.(done, targets.length);
+      if (opts.onPartial && done % 40 === 0) opts.onPartial({ ...out });
     }
   }
 
